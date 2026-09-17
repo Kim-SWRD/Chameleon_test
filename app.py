@@ -17,7 +17,7 @@ except FileNotFoundError:
     st.error("找不到 RCA.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
     st.stop()
 
-st.title("🔍 卡美故障排除查詢")
+st.subheader("🔍 卡美故障排除")
 
 # ==========================================
 # 📱 核心過濾區 (放回主畫面，適合單手向下滑動操作)
