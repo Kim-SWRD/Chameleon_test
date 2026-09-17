@@ -1,13 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-# 設定網頁標題與寬度
-st.set_page_config(page_title="卡美問題查詢系統", layout="centered")
+# 1. 將 layout 改為 "wide" (寬螢幕模式)，搭配側邊欄在電腦上視覺效果最好
+st.set_page_config(page_title="卡美問題查詢", layout="wide", initial_sidebar_state="expanded")
 
-st.title("🔍 故障排除查詢系統")
-st.write("請根據下方的條件篩選出對應的解決方案。")
-
-# --- 1. 讀取與快取資料 ---
+# --- 讀取與快取資料 ---
 @st.cache_data
 def load_data():
     df = pd.read_excel("RCA.xlsx", dtype=str)
@@ -17,82 +14,118 @@ def load_data():
 try:
     df = load_data()
 except FileNotFoundError:
-    st.error("找不到 RCA.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾 (工作目錄) 內。")
+    st.error("找不到 RCA.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
     st.stop()
 
-# --- ★ STATION 篩選 (過濾器) ---
-st.divider()
-st.subheader("🛠️ 選擇站別 (STATION)")
-
-# 抓出不重複的 STATION，剔除無資料，並在最前面加上 "ALL"
-unique_stations = [x for x in df["STATION"].unique() if x != "無資料"]
-station_options = ["ALL"] + unique_stations
-
-# horizontal=True 讓選項像按鈕一樣水平並排
-selected_station = st.radio("請選擇要過濾的站別 (預設為 ALL)：", station_options, horizontal=True)
-
-# 根據選到的 STATION 產生一份「基礎資料庫 (base_df)」
-if selected_station == "ALL":
-    base_df = df
-else:
-    base_df = df[df["STATION"] == selected_station]
-
-# --- 2. 選擇查詢方式 ---
-st.divider()
-search_method = st.radio("第一步：請選擇查詢方式", ["使用 BIN_CODE", "使用 BIN"])
-
-filtered_df = pd.DataFrame()
-
-# --- 3. 根據選擇顯示第一個下拉選單，並顯示對應資訊 ---
-if search_method == "使用 BIN_CODE":
-    unique_bin_codes = [x for x in base_df["BIN_CODE"].unique() if x != "無資料"]
-    selected_val = st.selectbox("第二步：請選擇 BIN_CODE", unique_bin_codes)
+# ==========================================
+# 📱 側邊欄區域 (手機會自動收合，電腦會固定在左側)
+# ==========================================
+with st.sidebar:
+    st.title("🛠️ 篩選條件")
+    st.markdown("請依序選擇發生問題的站別與代碼。")
     
-    if selected_val:
-        filtered_df = base_df[base_df["BIN_CODE"] == selected_val]
-        associated_bins = [x for x in filtered_df["BIN"].unique() if x != "無資料"]
-        if associated_bins:
-            st.info(f"💡 對應的 BIN 為： {', '.join(associated_bins)}")
-        else:
-            st.info("💡 對應的 BIN 為： (無對應紀錄)")
+    # --- 步驟零：STATION 篩選 ---
+    unique_stations = [x for x in df["STATION"].unique() if x != "無資料"]
+    station_options = ["ALL"] + unique_stations
+    
+    selected_station = st.selectbox("📌 選擇站別 (STATION)", station_options)
+
+    if selected_station == "ALL":
+        base_df = df
+    else:
+        base_df = df[df["STATION"] == selected_station]
+
+    st.divider()
+
+    # --- 步驟一：選擇查詢方式 ---
+    search_method = st.radio("🔍 第一步：選擇查詢方式", ["使用 BIN_CODE", "使用 BIN"])
+    
+    filtered_df = pd.DataFrame()
+    selected_sub_bin = None
+    
+    # 準備兩個變數，用來記錄要顯示在右邊的 BIN_CODE 和 BIN
+    display_bin_code = ""
+    display_bin = ""
+
+    # --- 步驟二：選擇 BIN CODE / BIN ---
+    if search_method == "使用 BIN_CODE":
+        unique_bin_codes = [x for x in base_df["BIN_CODE"].unique() if x != "無資料"]
+        selected_val = st.selectbox("🏷️ 第二步：請選擇 BIN_CODE", unique_bin_codes)
         
-else:
-    unique_bins = [x for x in base_df["BIN"].unique() if x != "無資料"]
-    selected_val = st.selectbox("第二步：請選擇 BIN", unique_bins)
-    
-    if selected_val:
-        filtered_df = base_df[base_df["BIN"] == selected_val]
-        associated_bin_codes = [x for x in filtered_df["BIN_CODE"].unique() if x != "無資料"]
-        if associated_bin_codes:
-            st.info(f"💡 對應的 BIN_CODE 為： {', '.join(associated_bin_codes)}")
-        else:
-            st.info("💡 對應的 BIN_CODE 為： (無對應紀錄)")
+        if selected_val:
+            filtered_df = base_df[base_df["BIN_CODE"] == selected_val]
+            associated_bins = [x for x in filtered_df["BIN"].unique() if x != "無資料"]
+            
+            # 記錄要顯示在右邊的字串
+            display_bin_code = selected_val
+            display_bin = ', '.join(associated_bins) if associated_bins else "(無對應紀錄)"
+            
+            if associated_bins:
+                st.caption(f"💡 對應的 BIN: {display_bin}")
+            else:
+                st.caption("💡 對應的 BIN: (無對應紀錄)")
+            
+    else:
+        unique_bins = [x for x in base_df["BIN"].unique() if x != "無資料"]
+        selected_val = st.selectbox("🏷️ 第二步：請選擇 BIN", unique_bins)
+        
+        if selected_val:
+            filtered_df = base_df[base_df["BIN"] == selected_val]
+            associated_bin_codes = [x for x in filtered_df["BIN_CODE"].unique() if x != "無資料"]
+            
+            # 記錄要顯示在右邊的字串
+            display_bin = selected_val
+            display_bin_code = ', '.join(associated_bin_codes) if associated_bin_codes else "(無對應紀錄)"
+            
+            if associated_bin_codes:
+                st.caption(f"💡 對應的 BIN_CODE: {display_bin_code}")
+            else:
+                st.caption("💡 對應的 BIN_CODE: (無對應紀錄)")
 
-# --- 4. 顯示 SUB_BIN 下拉選單 ---
-if not filtered_df.empty:
-    unique_sub_bins = filtered_df["SUB_BIN"].unique()
-    selected_sub_bin = st.selectbox("第三步：請選擇 SUB_BIN", unique_sub_bins)
+    st.divider()
+
+    # --- 步驟三：選擇 SUB_BIN ---
+    if not filtered_df.empty:
+        unique_sub_bins = filtered_df["SUB_BIN"].unique()
+        selected_sub_bin = st.selectbox("📑 第三步：請選擇 SUB_BIN", unique_sub_bins)
+
+
+# ==========================================
+# 🖥️ 主畫面區域 (顯示結果)
+# ==========================================
+st.title("🔍 故障排除查詢系統")
+
+if filtered_df.empty or not selected_sub_bin:
+    st.info("👈 請從左側選單 (手機請點擊左上角 〉圖示) 開始選擇條件。")
+else:
+    st.markdown("### 📌 查詢條件確認")
     
-    # 在選單正下方，把 SUB_BIN 的全文完整印出來
-    if selected_sub_bin and selected_sub_bin != "無資料":
-        st.markdown(f"> **🏷️ SUB_BIN 全文：**  \n> {selected_sub_bin}")
+    # ★ 修改處：移除 col1, col2，改為直接上下顯示
+    with st.container(border=True):
+        st.markdown(f"**🔹 BIN_CODE:** {display_bin_code}")
+        st.markdown(f"**🔸 BIN:** {display_bin}")
+        
+        # 顯示 SUB_BIN 全文
+        if selected_sub_bin != "無資料":
+            st.markdown(f"> **🏷️ SUB_BIN 全文：**  \n> {selected_sub_bin}")
+            
+    st.divider()
     
     # 進行最終過濾
     final_df = filtered_df[filtered_df["SUB_BIN"] == selected_sub_bin]
     
-    # --- 5. 顯示結果 (Possible Cause & Solution) ---
-    st.subheader("💡 查詢結果")
-    st.write(f"共找到 {len(final_df)} 筆對應的解決方案：")
+    st.subheader(f"💡 查詢結果 (共 {len(final_df)} 筆)")
     
+    # 印出結果
     for index, row in final_df.iterrows():
         with st.container(border=True):
             st.markdown(f"**🚨 Possible Cause (可能原因):**\n{row['Possible Cause']}")
             st.markdown(f"**✅ Solution (解決方案):**\n{row['Solution']}")
             
-            # 顯示參考 Log
+            col1, col2 = st.columns(2)
+            
             if row['Ref Log'] != "無資料":
-                st.caption(f"Ref Log: {row['Ref Log']}")
+                col1.caption(f"**Ref Log:** {row['Ref Log']}")
                 
-            # ★ 新增：顯示 REV 欄位
             if row['REV'] != "無資料":
-                st.caption(f"REV: {row['REV']}")
+                col2.caption(f"**REV:** {row['REV']}")
