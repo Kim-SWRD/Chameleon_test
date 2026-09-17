@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 
-# 將 layout 改回 "centered"，這樣手機畫面緊湊，電腦版也不會過寬
 st.set_page_config(page_title="卡美問題查詢", layout="centered")
 
 # --- 讀取與快取資料 ---
@@ -17,15 +16,17 @@ except FileNotFoundError:
     st.error("找不到 RCA.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
     st.stop()
 
-st.subheader("🔍 卡美故障排除")
+# ★ 修改 1：將 title 改為 header，避免手機標題太大折成兩行
+st.header("🔍 故障排除查詢")
 
 # ==========================================
-# 📱 核心過濾區 (放回主畫面，適合單手向下滑動操作)
+# 📱 核心過濾區
 # ==========================================
 with st.container(border=True):
     unique_stations = [x for x in df["STATION"].unique() if x != "無資料"]
     station_options = ["ALL"] + unique_stations
     
+    # ★ 修改 2：精簡站別標題
     selected_station = st.selectbox("📌 選擇站別", station_options)
     
     if selected_station == "ALL":
@@ -38,7 +39,6 @@ with st.container(border=True):
     filtered_df = pd.DataFrame()
     selected_sub_bin = None
     
-    # 初始化顯示變數，用來把資料帶到下方的結果區
     display_bin_code = ""
     display_bin = ""
 
@@ -50,9 +50,9 @@ with st.container(border=True):
             filtered_df = base_df[base_df["BIN_CODE"] == selected_val]
             associated_bins = [x for x in filtered_df["BIN"].unique() if x != "無資料"]
             
-            # 記錄選到的與對應的資料
             display_bin_code = selected_val
             display_bin = ', '.join(associated_bins) if associated_bins else "(無對應紀錄)"
+            
             st.caption(f"💡 對應 BIN: {display_bin}")
             
     else:
@@ -63,25 +63,24 @@ with st.container(border=True):
             filtered_df = base_df[base_df["BIN"] == selected_val]
             associated_bin_codes = [x for x in filtered_df["BIN_CODE"].unique() if x != "無資料"]
             
-            # 記錄選到的與對應的資料
             display_bin = selected_val
             display_bin_code = ', '.join(associated_bin_codes) if associated_bin_codes else "(無對應紀錄)"
+            
+            # ★ 修改 3：在選擇 BIN 的時候，同步顯示對應的 BIN_CODE 與剛剛選取的 BIN 全文
             st.caption(f"💡 對應 BIN_CODE: {display_bin_code}")
+            st.caption(f"💡 BIN 全文: {display_bin}")
 
     if not filtered_df.empty:
         unique_sub_bins = filtered_df["SUB_BIN"].unique()
         selected_sub_bin = st.selectbox("📑 第三步：請選擇 SUB_BIN", unique_sub_bins)
 
 # ==========================================
-# 🖥️ 顯示結果區域 (極簡化、高對比色塊)
+# 🖥️ 顯示結果區域
 # ==========================================
 if not filtered_df.empty and selected_sub_bin:
     st.divider() 
     
-    # ★ 新增：在 SUB_BIN 上方完整印出 BIN_CODE 與 BIN
     st.markdown(f"**🏷️ BIN_CODE:** {display_bin_code}")
-    
-    # 如果 BIN 的字串很長，可以讓它折行顯示，維持版面乾淨
     st.markdown(f"**🏷️ BIN 全文:**  \n{display_bin}")
     
     if selected_sub_bin != "無資料":
