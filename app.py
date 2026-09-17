@@ -16,7 +16,6 @@ except FileNotFoundError:
     st.error("找不到 RCA.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
     st.stop()
 
-# ★ 修改 1：將 title 改為 header，避免手機標題太大折成兩行
 st.header("🔍 故障排除查詢")
 
 # ==========================================
@@ -26,7 +25,6 @@ with st.container(border=True):
     unique_stations = [x for x in df["STATION"].unique() if x != "無資料"]
     station_options = ["ALL"] + unique_stations
     
-    # ★ 修改 2：精簡站別標題
     selected_station = st.selectbox("📌 選擇站別", station_options)
     
     if selected_station == "ALL":
@@ -66,7 +64,6 @@ with st.container(border=True):
             display_bin = selected_val
             display_bin_code = ', '.join(associated_bin_codes) if associated_bin_codes else "(無對應紀錄)"
             
-            # ★ 修改 3：在選擇 BIN 的時候，同步顯示對應的 BIN_CODE 與剛剛選取的 BIN 全文
             st.caption(f"💡 對應 BIN_CODE: {display_bin_code}")
             st.caption(f"💡 BIN 全文: {display_bin}")
 
@@ -91,8 +88,13 @@ if not filtered_df.empty and selected_sub_bin:
     
     for index, row in final_df.iterrows():
         with st.container(border=True):
-            st.error(f"**🚨 可能原因 (Cause):**  \n{row['Possible Cause']}")
-            st.success(f"**✅ 解決方案 (Solution):**  \n{row['Solution']}")
+            
+            # ★ 修改處：先用 replace('\\n', '\n') 處理純文字的字元，再替換成 Markdown 的換行格式
+            cause_text = str(row['Possible Cause']).replace('\\n', '\n').replace('\n', '  \n')
+            solution_text = str(row['Solution']).replace('\\n', '\n').replace('\n', '  \n')
+            
+            st.error(f"**🚨 可能原因 (Cause):**  \n{cause_text}")
+            st.success(f"**✅ 解決方案 (Solution):**  \n{solution_text}")
             
             meta_info = []
             if row['Ref Log'] != "無資料":
