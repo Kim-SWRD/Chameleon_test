@@ -4,7 +4,7 @@ import pandas as pd
 st.set_page_config(page_title="卡美問題查詢", layout="centered")
 
 # --- 讀取與快取資料 ---
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_data():
     df = pd.read_excel("RCA.xlsx", dtype=str)
     df.fillna("無資料", inplace=True)
