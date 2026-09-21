@@ -4,9 +4,9 @@ import pandas as pd
 st.set_page_config(page_title="卡美問題與 SN 查詢", layout="centered")
 
 # --- 自訂 CSS 樣式 ---
-# 透過 CSS 將 Streamlit 預設的 primary 按鈕顏色改為綠色，避免紅色帶來錯誤的錯覺
 st.markdown("""
 <style>
+/* 1. 將預設 primary 按鈕改為綠色 */
 button[kind="primary"] {
     background-color: #28a745 !important;
     border-color: #28a745 !important;
@@ -15,6 +15,29 @@ button[kind="primary"] {
 button[kind="primary"]:hover {
     background-color: #218838 !important;
     border-color: #1e7e34 !important;
+}
+
+/* 2. 放大 Tab 分頁的標題字體，取代原本 Title 的視覺地位 */
+button[data-baseweb="tab"] p {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+}
+
+/* 3. 強制手機版 column 維持水平排列 (不會變成一個一個往下疊) */
+@media (max-width: 768px) {
+    div[data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+    }
+    div[data-testid="column"] {
+        width: 10% !important;
+        flex: 1 1 10% !important;
+        min-width: 25px !important;
+    }
+    /* 在手機螢幕上縮小一點按鈕的內距和字體，避免擠到破版 */
+    div[data-testid="column"] button {
+        padding: 0.1rem 0.2rem !important;
+        font-size: 11px !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -60,10 +83,8 @@ except FileNotFoundError:
     st.error("找不到 TS2_mapping.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
     st.stop()
 
-st.title("🛠️ 伺服器系統查詢工具")
-
 # ==========================================
-# 📑 建立頂部切換分頁
+# 📑 建立頂部切換分頁 (字體已透過 CSS 放大)
 # ==========================================
 tab_rca, tab_map = st.tabs(["🔍 RCA 故障排除查詢", "🔄 TS2 SN Mapping 查詢"])
 
@@ -71,8 +92,6 @@ tab_rca, tab_map = st.tabs(["🔍 RCA 故障排除查詢", "🔄 TS2 SN Mapping 
 # 分頁 1: RCA 故障排除查詢
 # ==========================================
 with tab_rca:
-    st.header("🔍 RCA 故障排除查詢")
-    
     with st.container(border=True):
         unique_stations = [x for x in df_rca["STATION"].unique() if x != "無資料"]
         station_options = ["ALL"] + unique_stations
@@ -158,8 +177,6 @@ with tab_rca:
 # 分頁 2: TS2 SN Mapping 查詢
 # ==========================================
 with tab_map:
-    st.header("🔄 TS2 SN Mapping 查詢")
-    
     # 定義按鈕的回呼函式：點擊按鈕後，自動將搜尋條件切換為 TS2# 並填入對應數字
     def set_ts2_search(num_str):
         st.session_state["map_col"] = "TS2#"
@@ -182,11 +199,11 @@ with tab_map:
                 if num > 99:
                     break
                 
-                # 判斷該號碼是否有資料，有資料套用 primary (已被 CSS 改為綠色)，無資料套用 secondary (預設灰色)
+                # 判斷該號碼是否有資料
                 is_valid = str(num) in valid_ts2
                 btn_type = "primary" if is_valid else "secondary"
                 
-                # 建立按鈕並綁定 on_click 事件，文字只顯示純數字
+                # 建立按鈕
                 cols[col_idx].button(
                     str(num), 
                     key=f"btn_quick_{num}", 
@@ -196,7 +213,7 @@ with tab_map:
                     use_container_width=True
                 )
 
-    # 2. 原本的搜尋區塊 (保留並支援與按鈕連動)
+    # 2. 原本的搜尋區塊
     with st.container(border=True):
         st.markdown("輸入 **TS2# NO.** (例如: 2), 或是輸入 **CSM BASE, CSM TRAY, FULL SYS** 任意一組 SN，即可互相反查。")
         
@@ -222,14 +239,33 @@ with tab_map:
             
             for idx, row in match_df.iterrows():
                 with st.container(border=True):
-                    # 固定顯示 TS2# 前綴作為標題
-                    st.markdown(f"### 🔹 系統標號：TS2#{row['TS2#']}")
+                    # 顯示標題與可快速複製的系統標號
+                    st.markdown("### 🔹 系統標號")
+                    st.code(f"TS2#{row['TS2#']}", language="plaintext")
                     
-                    # 使用三個 Column 並列顯示對應的三個重要 SN
+                    # 使用三個 Column 並列顯示對應的三個重要 SN，若有值則提供複製功能
                     c1, c2, c3 = st.columns(3)
-                    c1.info(f"**CSM BASE**  \n{row['CSM BASE']}")
-                    c2.info(f"**CSM TRAY**  \n{row['CSM TRAY']}")
-                    c3.info(f"**FULL SYS**  \n{row['FULL SYS']}")
+                    
+                    with c1:
+                        st.markdown("**CSM BASE**")
+                        if pd.notna(row['CSM BASE']) and row['CSM BASE'] != "無資料":
+                            st.code(row['CSM BASE'], language="plaintext")
+                        else:
+                            st.info("無資料")
+                            
+                    with c2:
+                        st.markdown("**CSM TRAY**")
+                        if pd.notna(row['CSM TRAY']) and row['CSM TRAY'] != "無資料":
+                            st.code(row['CSM TRAY'], language="plaintext")
+                        else:
+                            st.info("無資料")
+                            
+                    with c3:
+                        st.markdown("**FULL SYS**")
+                        if pd.notna(row['FULL SYS']) and row['FULL SYS'] != "無資料":
+                            st.code(row['FULL SYS'], language="plaintext")
+                        else:
+                            st.info("無資料")
                     
                     # 補充顯示旁邊的測試狀態
                     st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
