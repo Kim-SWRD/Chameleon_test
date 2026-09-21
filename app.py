@@ -23,28 +23,39 @@ button[data-baseweb="tab"] p {
     font-weight: 700 !important;
 }
 
-/* 3. 強制 st.columns 在所有螢幕尺寸下 (包含手機直向) 保持水平排列 */
-/* Streamlit 1.30+ 版本使用 data-testid="stHorizontalBlock" */
-[data-testid="stHorizontalBlock"] {
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important; /* 如果螢幕真的太小，允許橫向捲動，避免按鈕被壓扁到看不見 */
-}
-
-/* 強制每個 column 佔據相等的寬度 */
-[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    width: calc(10% - 0.2rem) !important;
-    flex: 1 1 auto !important;
-    min-width: 0 !important;
-    padding: 0 0.1rem !important; /* 縮小按鈕之間的間距 */
-}
-
-/* 縮小按鈕內的 padding 讓它在手機上能擠得下 */
-[data-testid="stHorizontalBlock"] > div[data-testid="column"] button {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    width: 100% !important;
-    font-size: 12px !important; 
+/* 3. 手機版按鈕面板優化：強制 10 欄並排，絕對不允許滑動 */
+@media (max-width: 768px) {
+    /* 只針對包含 10 個欄位的區塊 (即按鈕面板)，避免影響下方的搜尋框 */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        width: 100% !important;
+        gap: 2px !important; /* 按鈕之間的微小間距 */
+        overflow: hidden !important; /* 絕對不允許滑動 */
+    }
+    
+    /* 強制每個按鈕外框精準佔據 10% 寬度，移除所有 padding */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) > [data-testid="column"] {
+        width: 10% !important;
+        min-width: 0 !important;
+        max-width: 10% !important;
+        flex: 1 1 10% !important;
+        padding: 0 !important; 
+    }
+    
+    /* 縮小按鈕本體與字體，確保能完美塞進手機螢幕 */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) button {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 11px !important;
+        min-height: 35px !important; /* 確保按鈕高度一致且好點擊 */
+    }
+    
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) button p {
+        font-size: 11px !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -188,7 +199,7 @@ with tab_map:
     with st.expander(panel_title, expanded=True):
         # 建立 10 列 x 10 欄的按鈕矩陣
         for row in range(10):
-            # 這裡的 st.columns(10) 會被上方的 CSS 強制設定為 nowrap 且 flex-direction: row
+            # 這裡的 st.columns(10) 在手機上會被我們的 CSS 強制設定為 nowrap 並等比縮放
             cols = st.columns(10)
             for col_idx in range(10):
                 num = row * 10 + col_idx + 1
@@ -232,10 +243,6 @@ with tab_map:
                     st.markdown("### 🔹 系統標號")
                     st.code(f"TS2#{row['TS2#']}", language="plaintext")
                     
-                    # 這裡的 c1, c2, c3 也是 st.columns，為了不影響它們在手機上自然往下疊的行為
-                    # 我們只在 CSS 裡鎖定了 "stHorizontalBlock"，但這可能會一併影響這三個欄位。
-                    # 如果你發現這三個欄位在手機上也變成水平排列且擠在一起，
-                    # 可以在 CSS 中替換選擇器，或者就讓它們水平排列，因為字串可以用 st.code 滾動顯示。
                     c1, c2, c3 = st.columns(3)
                     
                     with c1:
