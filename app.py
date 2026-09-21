@@ -23,36 +23,36 @@ button[data-baseweb="tab"] p {
     font-weight: 700 !important;
 }
 
-/* 3. ★ 終極解決方案：強制 Expander (展開面板) 內的按鈕絕對並排 ★ */
-/* 鎖定 Expander 內部的水平容器，擁有極高優先權，無視 Streamlit 預設的手機版垂直堆疊 */
+/* 3. ★ 終極大絕招：使用 CSS Grid 強制 10 欄網格佈局 ★ */
+/* 只鎖定 Expander 展開面板內的區塊，完全覆寫 Streamlit 的 Flexbox 設定 */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important; /* 絕對水平排列 */
-    flex-wrap: nowrap !important;   /* 絕對不換行 */
-    gap: 3px !important;            /* 按鈕的左右間隙 */
-    margin-bottom: 3px !important;  /* 按鈕的上下間隙 */
+    display: grid !important;
+    grid-template-columns: repeat(10, 1fr) !important; /* 強制切成絕對等寬的 10 格 */
+    gap: 3px !important; /* 按鈕間距 */
+    width: 100% !important; /* 絕對不允許超過螢幕寬度 */
+    padding-bottom: 3px !important;
 }
 
-/* 強制每個按鈕外框只佔據螢幕的 10% */
+/* 強制每個 Column 只乖乖待在自己的網格裡 */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    width: 10% !important;
-    min-width: 0 !important; 
-    flex: 1 1 10% !important;
-    padding: 0 !important; /* 消除多餘留白 */
+    width: 100% !important; 
+    min-width: 0 !important; /* 防止內容撐破網格 */
+    padding: 0 !important; /* 拔除預設留白 */
 }
 
-/* 縮小按鈕本體，讓它變成適合點擊的方塊 */
+/* 把按鈕形狀調整為完美塞滿網格的方塊 */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button {
     width: 100% !important;
-    padding: 0 !important;
+    padding: 2px 0 !important; /* 縮減上下 padding */
     margin: 0 !important;
-    min-height: 35px !important; /* 確保按鈕高度一致且好點擊 */
+    min-height: 32px !important; /* 確保按鈕有足夠高度好點擊 */
 }
 
-/* 確保按鈕內的字體在手機上不會太大而撐破按鈕 */
+/* 縮小按鈕內的數字字體，確保手機上 99 也塞得下 */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button p {
-    font-size: 12px !important;
-    overflow: hidden !important;
+    font-size: 11px !important;
+    margin: 0 !important;
+    line-height: 1 !important;
 }
 </style>
 """, unsafe_allow_html=True)
