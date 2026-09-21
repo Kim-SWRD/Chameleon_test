@@ -23,37 +23,33 @@ button[data-baseweb="tab"] p {
     font-weight: 700 !important;
 }
 
-/* 3. 手機版按鈕面板優化：強制 10 欄並排，絕對不允許滑動 */
+/* 3. 解決手機版直向按鈕變成垂直堆疊的問題 (高相容性寫法) */
 @media (max-width: 768px) {
-    /* 只針對包含 10 個欄位的區塊 (即按鈕面板)，避免影響下方的搜尋框 */
-    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) {
+    /* 強制所有水平容器在手機上保持水平方向，不允許變垂直 */
+    div[data-testid="stHorizontalBlock"] {
         flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        width: 100% !important;
-        gap: 2px !important; /* 按鈕之間的微小間距 */
-        overflow: hidden !important; /* 絕對不允許滑動 */
+        flex-wrap: wrap !important;
     }
     
-    /* 強制每個按鈕外框精準佔據 10% 寬度，移除所有 padding */
-    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) > [data-testid="column"] {
-        width: 10% !important;
-        min-width: 0 !important;
-        max-width: 10% !important;
-        flex: 1 1 10% !important;
-        padding: 0 !important; 
+    /* 強制所有欄位在手機上平均分配剩餘寬度，覆寫 Streamlit 的 100% 設定 */
+    div[data-testid="column"] {
+        width: auto !important;
+        flex: 1 1 0% !important;
+        min-width: 0 !important; 
+        padding: 0 1px !important; /* 縮小按鈕之間的間隙 */
     }
-    
-    /* 縮小按鈕本體與字體，確保能完美塞進手機螢幕 */
-    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) button {
+
+    /* 按鈕本體的極限壓縮，確保 10 個能完美塞進螢幕 */
+    div[data-testid="column"] button {
         width: 100% !important;
         min-width: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
-        font-size: 11px !important;
-        min-height: 35px !important; /* 確保按鈕高度一致且好點擊 */
+        min-height: 35px !important; 
     }
     
-    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(10)) button p {
+    /* 縮小按鈕內的數字字體 */
+    div[data-testid="column"] button p {
         font-size: 11px !important;
     }
 }
@@ -197,9 +193,7 @@ with tab_map:
 
     panel_title = f"🎛️ TS2# 快速點選面板 (綠色: 有資料 ({valid_count}筆) / 灰色: 無資料)"
     with st.expander(panel_title, expanded=True):
-        # 建立 10 列 x 10 欄的按鈕矩陣
         for row in range(10):
-            # 這裡的 st.columns(10) 在手機上會被我們的 CSS 強制設定為 nowrap 並等比縮放
             cols = st.columns(10)
             for col_idx in range(10):
                 num = row * 10 + col_idx + 1
