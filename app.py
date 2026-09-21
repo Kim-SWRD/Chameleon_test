@@ -23,35 +23,36 @@ button[data-baseweb="tab"] p {
     font-weight: 700 !important;
 }
 
-/* 3. 解決手機版直向按鈕變成垂直堆疊的問題 (高相容性寫法) */
-@media (max-width: 768px) {
-    /* 強制所有水平容器在手機上保持水平方向，不允許變垂直 */
-    div[data-testid="stHorizontalBlock"] {
-        flex-direction: row !important;
-        flex-wrap: wrap !important;
-    }
-    
-    /* 強制所有欄位在手機上平均分配剩餘寬度，覆寫 Streamlit 的 100% 設定 */
-    div[data-testid="column"] {
-        width: auto !important;
-        flex: 1 1 0% !important;
-        min-width: 0 !important; 
-        padding: 0 1px !important; /* 縮小按鈕之間的間隙 */
-    }
+/* 3. ★ 終極解決方案：強制 Expander (展開面板) 內的按鈕絕對並排 ★ */
+/* 鎖定 Expander 內部的水平容器，擁有極高優先權，無視 Streamlit 預設的手機版垂直堆疊 */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important; /* 絕對水平排列 */
+    flex-wrap: nowrap !important;   /* 絕對不換行 */
+    gap: 3px !important;            /* 按鈕的左右間隙 */
+    margin-bottom: 3px !important;  /* 按鈕的上下間隙 */
+}
 
-    /* 按鈕本體的極限壓縮，確保 10 個能完美塞進螢幕 */
-    div[data-testid="column"] button {
-        width: 100% !important;
-        min-width: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        min-height: 35px !important; 
-    }
-    
-    /* 縮小按鈕內的數字字體 */
-    div[data-testid="column"] button p {
-        font-size: 11px !important;
-    }
+/* 強制每個按鈕外框只佔據螢幕的 10% */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    width: 10% !important;
+    min-width: 0 !important; 
+    flex: 1 1 10% !important;
+    padding: 0 !important; /* 消除多餘留白 */
+}
+
+/* 縮小按鈕本體，讓它變成適合點擊的方塊 */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button {
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 35px !important; /* 確保按鈕高度一致且好點擊 */
+}
+
+/* 確保按鈕內的字體在手機上不會太大而撐破按鈕 */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button p {
+    font-size: 12px !important;
+    overflow: hidden !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -193,6 +194,7 @@ with tab_map:
 
     panel_title = f"🎛️ TS2# 快速點選面板 (綠色: 有資料 ({valid_count}筆) / 灰色: 無資料)"
     with st.expander(panel_title, expanded=True):
+        # 建立 10 列 x 10 欄的按鈕矩陣
         for row in range(10):
             cols = st.columns(10)
             for col_idx in range(10):
