@@ -17,33 +17,39 @@ button[kind="primary"]:hover {
     border-color: #1e7e34 !important;
 }
 
-/* 2. 放大 Tab 分頁的標題字體，取代原本 Title 的視覺地位 */
+/* 2. 放大 Tab 分頁的標題字體 */
 button[data-baseweb="tab"] p {
     font-size: 20px !important;
     font-weight: 700 !important;
 }
 
-/* 3. 強制手機版 column 維持水平排列 (不會變成一個一個往下疊) */
-@media (max-width: 768px) {
-    div[data-testid="stHorizontalBlock"] {
-        flex-direction: row !important;
-    }
-    div[data-testid="column"] {
-        width: 10% !important;
-        flex: 1 1 10% !important;
-        min-width: 25px !important;
-    }
-    /* 在手機螢幕上縮小一點按鈕的內距和字體，避免擠到破版 */
-    div[data-testid="column"] button {
-        padding: 0.1rem 0.2rem !important;
-        font-size: 11px !important;
-    }
+/* 3. 強制 st.columns 在所有螢幕尺寸下 (包含手機直向) 保持水平排列 */
+/* Streamlit 1.30+ 版本使用 data-testid="stHorizontalBlock" */
+[data-testid="stHorizontalBlock"] {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important; /* 如果螢幕真的太小，允許橫向捲動，避免按鈕被壓扁到看不見 */
+}
+
+/* 強制每個 column 佔據相等的寬度 */
+[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    width: calc(10% - 0.2rem) !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    padding: 0 0.1rem !important; /* 縮小按鈕之間的間距 */
+}
+
+/* 縮小按鈕內的 padding 讓它在手機上能擠得下 */
+[data-testid="stHorizontalBlock"] > div[data-testid="column"] button {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    width: 100% !important;
+    font-size: 12px !important; 
 }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 初始化 Session State ---
-# 用於讓「按鈕點擊」與「輸入框」能夠互相連動
 if "map_col" not in st.session_state:
     st.session_state["map_col"] = "TS2#"
 if "map_search_input" not in st.session_state:
@@ -58,16 +64,10 @@ def load_rca_data():
 
 @st.cache_data(ttl=60)
 def load_mapping_data():
-    # 讀取 mapping 資料，將全欄位轉為字串
     df = pd.read_excel("TS2_mapping.xlsx", dtype=str)
-    # 過濾掉開頭的無效資料 (NO. 為 NaN 的列)
     df = df.dropna(subset=['NO.'])
-    # 清理 NO. 欄位，避免 Pandas 將整數讀成 2.0，統一轉為整數字串
     df["NO."] = df["NO."].astype(str).str.replace(r'\.0$', '', regex=True)
-    
-    # 將 DataFrame 內的 NO. 欄位更名為 TS2#，配合下拉選單顯示
     df.rename(columns={"NO.": "TS2#"}, inplace=True) 
-    
     df.fillna("無資料", inplace=True)
     return df
 
@@ -84,7 +84,7 @@ except FileNotFoundError:
     st.stop()
 
 # ==========================================
-# 📑 建立頂部切換分頁 (字體已透過 CSS 放大)
+# 📑 建立頂部切換分頁
 # ==========================================
 tab_rca, tab_map = st.tabs(["🔍 RCA 故障排除查詢", "🔄 TS2 SN Mapping 查詢"])
 
@@ -177,33 +177,27 @@ with tab_rca:
 # 分頁 2: TS2 SN Mapping 查詢
 # ==========================================
 with tab_map:
-    # 定義按鈕的回呼函式：點擊按鈕後，自動將搜尋條件切換為 TS2# 並填入對應數字
     def set_ts2_search(num_str):
         st.session_state["map_col"] = "TS2#"
         st.session_state["map_search_input"] = num_str
 
-    # 取得目前 df 中所有有效的 TS2# 集合，方便快速比對
     valid_ts2 = set(df_map["TS2#"].dropna().astype(str).tolist())
-    
-    # 統計 1~99 之間有幾筆資料
     valid_count = sum(1 for i in range(1, 100) if str(i) in valid_ts2)
 
-    # 1. 建立 1~99 的快速點選面板 (動態顯示統計數量與綠色提示)
     panel_title = f"🎛️ TS2# 快速點選面板 (綠色: 有資料 ({valid_count}筆) / 灰色: 無資料)"
     with st.expander(panel_title, expanded=True):
         # 建立 10 列 x 10 欄的按鈕矩陣
         for row in range(10):
+            # 這裡的 st.columns(10) 會被上方的 CSS 強制設定為 nowrap 且 flex-direction: row
             cols = st.columns(10)
             for col_idx in range(10):
                 num = row * 10 + col_idx + 1
                 if num > 99:
                     break
                 
-                # 判斷該號碼是否有資料
                 is_valid = str(num) in valid_ts2
                 btn_type = "primary" if is_valid else "secondary"
                 
-                # 建立按鈕
                 cols[col_idx].button(
                     str(num), 
                     key=f"btn_quick_{num}", 
@@ -213,7 +207,6 @@ with tab_map:
                     use_container_width=True
                 )
 
-    # 2. 原本的搜尋區塊
     with st.container(border=True):
         st.markdown("輸入 **TS2# NO.** (例如: 2), 或是輸入 **CSM BASE, CSM TRAY, FULL SYS** 任意一組 SN，即可互相反查。")
         
@@ -225,13 +218,10 @@ with tab_map:
         with col2:
             search_val = st.text_input(f"✍️ 請輸入 {search_col}", key="map_search_input").strip()
             
-    # 3. 執行搜尋比對
     if search_val:
-        # 智慧處理：自動過濾 "TS2#" 等字眼，只取數字
         if search_col == "TS2#":
             search_val = search_val.upper().replace("TS2#", "").replace("TS#", "").strip()
         
-        # 進行條件比對
         match_df = df_map[df_map[search_col] == search_val]
         
         if not match_df.empty:
@@ -239,11 +229,13 @@ with tab_map:
             
             for idx, row in match_df.iterrows():
                 with st.container(border=True):
-                    # 顯示標題與可快速複製的系統標號
                     st.markdown("### 🔹 系統標號")
                     st.code(f"TS2#{row['TS2#']}", language="plaintext")
                     
-                    # 使用三個 Column 並列顯示對應的三個重要 SN，若有值則提供複製功能
+                    # 這裡的 c1, c2, c3 也是 st.columns，為了不影響它們在手機上自然往下疊的行為
+                    # 我們只在 CSS 裡鎖定了 "stHorizontalBlock"，但這可能會一併影響這三個欄位。
+                    # 如果你發現這三個欄位在手機上也變成水平排列且擠在一起，
+                    # 可以在 CSS 中替換選擇器，或者就讓它們水平排列，因為字串可以用 st.code 滾動顯示。
                     c1, c2, c3 = st.columns(3)
                     
                     with c1:
@@ -267,7 +259,6 @@ with tab_map:
                         else:
                             st.info("無資料")
                     
-                    # 補充顯示旁邊的測試狀態
                     st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
             st.error(f"⚠️ 找不到 {search_col} = `{search_val}` 的資料，請確認輸入是否有誤。")
