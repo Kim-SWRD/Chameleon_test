@@ -23,50 +23,54 @@ button[data-baseweb="tab"] p {
     font-weight: 700 !important;
 }
 
-/* 3. ★ 捨棄複雜排版，回歸最穩定的 Flexbox 並拔除所有預設留白 ★ */
-
-/* 強制水平排列，不換行，縮小間距 */
+/* 3. ★ CSS Grid 強制 10 欄網格佈局 ★ */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 3px !important; /* 按鈕間的微小間距 */
-    padding-bottom: 5px !important;
+    display: grid !important;
+    grid-template-columns: repeat(10, 1fr) !important; 
+    gap: 4px !important; /* 按鈕間距稍微拉開一點點，讓正方形更好看 */
+    width: 100% !important; 
+    padding-bottom: 3px !important;
 }
 
-/* 每個欄位精準佔 10%，拔除 Streamlit 的預設 padding 避免按鈕被擠扁 */
+/* 強制每個 Column 只乖乖待在自己的網格裡 */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    width: 10% !important;
-    flex: 1 1 10% !important;
-    min-width: 0 !important;
+    width: 100% !important; 
+    min-width: 0 !important; 
     padding: 0 !important; 
 }
 
-/* 確保按鈕外層容器填滿 100% */
-div[data-testid="stExpanderDetails"] div.stButton {
+/* ★ 讓按鈕變成正方形的關鍵設定 ★ */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button {
     width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* ★ 按鈕本體設定為固定高度的方塊 ★ */
-div[data-testid="stExpanderDetails"] button {
-    width: 100% !important;
-    height: 40px !important; /* 固定 40px 高度，在手機上寬高比會非常接近完美的正方形 */
-    border-radius: 6px !important; /* 順眼的微圓角 */
+    aspect-ratio: 1 / 1 !important; /* 強制 1:1 正方形 */
+    border-radius: 6px !important;  /* 改為微圓角的方塊，消除橢圓膠囊感 */
     padding: 0 !important;
     margin: 0 !important;
+    min-height: 0 !important;       /* 移除固定高度，由長寬比自動控制 */
+    height: auto !important;
     display: flex !important;
-    justify-content: center !important;
     align-items: center !important;
+    justify-content: center !important;
 }
 
-/* ★ 字體大小適中加粗，絕對不截斷 ★ */
-div[data-testid="stExpanderDetails"] button p {
-    font-size: 13px !important;
-    font-weight: 700 !important;
+/* ★ 解決 Streamlit 按鈕內部隱藏 div 造成的偏移 ★ */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button > div {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
     margin: 0 !important;
-    line-height: 1 !important;
+    padding: 0 !important;
+}
+
+/* ★ 調整數字字體，確保絕對置中且清晰 ★ */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button p {
+    font-size: 13px !important; /* 稍微放大一點讓數字更好辨識 */
+    font-weight: 700 !important; /* 加粗 */
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: center !important;
 }
 </style>
 """, unsafe_allow_html=True)
