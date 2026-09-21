@@ -41,7 +41,7 @@ div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] > div[
 
 /* ★ 讓按鈕變成正方形的關鍵設定 ★ */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button {
-    width: 100% !important;
+    width: 200% !important;
     aspect-ratio: 1 / 1 !important; /* 強制 1:1 正方形 */
     border-radius: 6px !important;  /* 改為微圓角的方塊，消除橢圓膠囊感 */
     padding: 0 !important;
