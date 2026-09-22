@@ -1,77 +1,30 @@
 import streamlit as st
 import pandas as pd
+import io
+from github import Github
 
 st.set_page_config(page_title="卡美問題與 SN 查詢", layout="centered")
 
 # --- 自訂 CSS 樣式 ---
 st.markdown("""
 <style>
-/* 1. 將預設 primary 按鈕改為綠色 */
-button[kind="primary"] {
-    background-color: #28a745 !important;
-    border-color: #28a745 !important;
-    color: white !important;
-}
-button[kind="primary"]:hover {
-    background-color: #218838 !important;
-    border-color: #1e7e34 !important;
-}
+button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
+button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
+button[kind="tertiary"] { background-color: #ff9800 !important; border-color: #ff9800 !important; color: white !important; }
+button[kind="tertiary"]:hover { background-color: #e68a00 !important; border-color: #e68a00 !important; }
+button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
-/* 2. 放大 Tab 分頁的標題字體 */
-button[data-baseweb="tab"] p {
-    font-size: 20px !important;
-    font-weight: 700 !important;
-}
-
-/* 3. ★ CSS Grid 強制 10 欄網格佈局 ★ */
+/* CSS Grid 強制 10 欄網格佈局 */
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
-    display: grid !important;
-    grid-template-columns: repeat(10, 1fr) !important; 
-    gap: 4px !important; /* 按鈕間距稍微拉開一點點，讓正方形更好看 */
-    width: 100% !important; 
-    padding-bottom: 3px !important;
+    display: grid !important; grid-template-columns: repeat(10, 1fr) !important; gap: 4px !important; width: 100% !important; padding-bottom: 3px !important;
 }
-
-/* 強制每個 Column 只乖乖待在自己的網格裡 */
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    width: 100% !important; 
-    min-width: 0 !important; 
-    padding: 0 !important; 
-}
-
-/* ★ 讓按鈕變成正方形的關鍵設定 ★ */
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] { width: 100% !important; min-width: 0 !important; padding: 0 !important; }
 div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button {
-    width: 200% !important;
-    aspect-ratio: 1 / 1 !important; /* 強制 1:1 正方形 */
-    border-radius: 6px !important;  /* 改為微圓角的方塊，消除橢圓膠囊感 */
-    padding: 0 !important;
-    margin: 0 !important;
-    min-height: 0 !important;       /* 移除固定高度，由長寬比自動控制 */
-    height: auto !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    width: 200% !important; aspect-ratio: 1 / 1 !important; border-radius: 6px !important; padding: 0 !important; margin: 0 !important; min-height: 0 !important; height: auto !important; display: flex !important; align-items: center !important; justify-content: center !important;
 }
-
-/* ★ 解決 Streamlit 按鈕內部隱藏 div 造成的偏移 ★ */
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button > div {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* ★ 調整數字字體，確保絕對置中且清晰 ★ */
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button p {
-    font-size: 13px !important; /* 稍微放大一點讓數字更好辨識 */
-    font-weight: 700 !important; /* 加粗 */
-    margin: 0 !important;
-    padding: 0 !important;
-    text-align: center !important;
-}
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button > div { display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; }
+div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button p { font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; }
+div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,27 +93,20 @@ with tab_rca:
         if search_method == "使用 BIN_CODE":
             unique_bin_codes = [x for x in base_df["BIN_CODE"].unique() if x != "無資料"]
             selected_val = st.selectbox("🏷️ 第二步：請選擇 BIN_CODE", unique_bin_codes, key="rca_bincode")
-            
             if selected_val:
                 filtered_df = base_df[base_df["BIN_CODE"] == selected_val]
                 associated_bins = [x for x in filtered_df["BIN"].unique() if x != "無資料"]
-                
                 display_bin_code = selected_val
                 display_bin = ', '.join(associated_bins) if associated_bins else "(無對應紀錄)"
-                
                 st.caption(f"💡 對應 BIN: {display_bin}")
-                
         else:
             unique_bins = [x for x in base_df["BIN"].unique() if x != "無資料"]
             selected_val = st.selectbox("🏷️ 第二步：請選擇 BIN", unique_bins, key="rca_bin")
-            
             if selected_val:
                 filtered_df = base_df[base_df["BIN"] == selected_val]
                 associated_bin_codes = [x for x in filtered_df["BIN_CODE"].unique() if x != "無資料"]
-                
                 display_bin = selected_val
                 display_bin_code = ', '.join(associated_bin_codes) if associated_bin_codes else "(無對應紀錄)"
-                
                 st.caption(f"💡 對應 BIN_CODE: {display_bin_code}")
                 st.caption(f"💡 BIN 全文: {display_bin}")
 
@@ -168,13 +114,10 @@ with tab_rca:
             unique_sub_bins = filtered_df["SUB_BIN"].unique()
             selected_sub_bin = st.selectbox("📑 第三步：請選擇 SUB_BIN", unique_sub_bins, key="rca_subbin")
 
-    # 顯示 RCA 結果區域
     if not filtered_df.empty and selected_sub_bin:
         st.divider() 
-        
         st.markdown(f"**🏷️ BIN_CODE:** {display_bin_code}")
         st.markdown(f"**🏷️ BIN 全文:**  \n{display_bin}")
-        
         if selected_sub_bin != "無資料":
             st.markdown(f"**🏷️ SUB_BIN 全文:**  \n{selected_sub_bin}")
         
@@ -185,7 +128,6 @@ with tab_rca:
             with st.container(border=True):
                 cause_text = str(row['Possible Cause']).replace('\\n', '\n').replace('\n', '  \n')
                 solution_text = str(row['Solution']).replace('\\n', '\n').replace('\n', '  \n')
-                
                 st.error(f"**🚨 可能原因 (Cause):**  \n{cause_text}")
                 st.success(f"**✅ 解決方案 (Solution):**  \n{solution_text}")
                 
@@ -194,13 +136,11 @@ with tab_rca:
                     meta_info.append(f"**Log:** {row['Ref Log']}")
                 if row['REV'] != "無資料":
                     meta_info.append(f"**REV:** {row['REV']}")
-                
                 if meta_info:
                     st.caption(" | ".join(meta_info))
 
-
 # ==========================================
-# 分頁 2: TS2 SN Mapping 查詢
+# 分頁 2: TS2 SN Mapping 查詢 (含 GitHub 上傳功能)
 # ==========================================
 with tab_map:
     def set_ts2_search(num_str):
@@ -209,10 +149,20 @@ with tab_map:
 
     valid_ts2 = set(df_map["TS2#"].dropna().astype(str).tolist())
     valid_count = sum(1 for i in range(1, 100) if str(i) in valid_ts2)
+    
+    current_search_col = st.session_state.get("map_col", "TS2#")
+    current_search_val = st.session_state.get("map_search_input", "").strip()
+    active_ts2_numbers = set()
+    
+    if current_search_val:
+        query_val = current_search_val
+        if current_search_col == "TS2#":
+            query_val = query_val.upper().replace("TS2#", "").replace("TS#", "").strip()
+        temp_df = df_map[df_map[current_search_col] == query_val]
+        active_ts2_numbers = set(temp_df["TS2#"].dropna().astype(str).tolist())
 
-    panel_title = f"🎛️ TS2# 快速點選面板 (綠色: 有資料 ({valid_count}筆) / 灰色: 無資料)"
+    panel_title = f"🎛️ TS2# 快速點選面板 (綠色: 有資料 ({valid_count}筆) / 橘色: 目前選取)"
     with st.expander(panel_title, expanded=True):
-        # 建立 10 列 x 10 欄的按鈕矩陣
         for row in range(10):
             cols = st.columns(10)
             for col_idx in range(10):
@@ -221,7 +171,14 @@ with tab_map:
                     break
                 
                 is_valid = str(num) in valid_ts2
-                btn_type = "primary" if is_valid else "secondary"
+                is_selected = str(num) in active_ts2_numbers
+                
+                if is_selected:
+                    btn_type = "tertiary"
+                elif is_valid:
+                    btn_type = "primary"
+                else:
+                    btn_type = "secondary"
                 
                 cols[col_idx].button(
                     str(num), 
@@ -253,33 +210,121 @@ with tab_map:
             st.success("✅ 找到對應的 SN 關聯資料！")
             
             for idx, row in match_df.iterrows():
+                # 紀錄當前的 TS2#
+                ts2_id = row['TS2#']
+                
                 with st.container(border=True):
-                    st.markdown("### 🔹 系統標號")
-                    st.code(f"TS2#{row['TS2#']}", language="plaintext")
+                    c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
+                    with c_title:
+                        st.markdown(f"### 🔹 系統標號：TS2#{ts2_id}")
+                    with c_toggle:
+                        is_editing = st.toggle("✏️ 進入編輯模式", key=f"toggle_{ts2_id}")
                     
                     c1, c2, c3 = st.columns(3)
                     
                     with c1:
                         st.markdown("**CSM BASE**")
-                        if pd.notna(row['CSM BASE']) and row['CSM BASE'] != "無資料":
-                            st.code(row['CSM BASE'], language="plaintext")
+                        val_base = row['CSM BASE'] if pd.notna(row['CSM BASE']) and row['CSM BASE'] != "無資料" else ""
+                        if is_editing:
+                            st.text_input("CSM BASE", value=val_base, label_visibility="collapsed", key=f"edit_base_{ts2_id}")
                         else:
-                            st.info("無資料")
+                            st.code(val_base if val_base else "無資料", language="plaintext")
                             
                     with c2:
                         st.markdown("**CSM TRAY**")
-                        if pd.notna(row['CSM TRAY']) and row['CSM TRAY'] != "無資料":
-                            st.code(row['CSM TRAY'], language="plaintext")
+                        val_tray = row['CSM TRAY'] if pd.notna(row['CSM TRAY']) and row['CSM TRAY'] != "無資料" else ""
+                        if is_editing:
+                            st.text_input("CSM TRAY", value=val_tray, label_visibility="collapsed", key=f"edit_tray_{ts2_id}")
                         else:
-                            st.info("無資料")
+                            st.code(val_tray if val_tray else "無資料", language="plaintext")
                             
                     with c3:
                         st.markdown("**FULL SYS**")
-                        if pd.notna(row['FULL SYS']) and row['FULL SYS'] != "無資料":
-                            st.code(row['FULL SYS'], language="plaintext")
+                        val_full = row['FULL SYS'] if pd.notna(row['FULL SYS']) and row['FULL SYS'] != "無資料" else ""
+                        if is_editing:
+                            st.text_input("FULL SYS", value=val_full, label_visibility="collapsed", key=f"edit_full_{ts2_id}")
                         else:
-                            st.info("無資料")
+                            st.code(val_full if val_full else "無資料", language="plaintext")
                     
-                    st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
+                    if is_editing:
+                        st.divider()
+                        st.markdown("#### 🔍 站點狀態")
+                        s_c1, s_c2, s_c3 = st.columns(3)
+                        status_opts = ["無資料", "PASS", "FAIL"]
+                        
+                        def get_opt_idx(val):
+                            if pd.isna(val) or str(val).strip() == "無資料": return 0
+                            v = str(val).strip().upper()
+                            if v == "PASS": return 1
+                            if v == "FAIL": return 2
+                            return 0
+
+                        with s_c1:
+                            st.selectbox("JTAG", status_opts, index=get_opt_idx(row.get('JTAG')), key=f"edit_jtag_{ts2_id}")
+                        with s_c2:
+                            st.selectbox("AOT", status_opts, index=get_opt_idx(row.get('AOT')), key=f"edit_aot_{ts2_id}")
+                        with s_c3:
+                            st.selectbox("FT", status_opts, index=get_opt_idx(row.get('FT')), key=f"edit_ft_{ts2_id}")
+                            
+                        st.write("") 
+                        
+                        # ★ 實際的儲存與上傳邏輯 ★
+                        if st.button("💾 儲存修改並同步至 GitHub", type="primary", use_container_width=True):
+                            # 1. 檢查是否有設定 Secrets
+                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                st.error("❌ 尚未設定 GitHub Token 或 Repo！請先在 .streamlit/secrets.toml 中設定。")
+                            else:
+                                with st.spinner("🔄 正在更新並上傳至 GitHub..."):
+                                    try:
+                                        # 2. 取得使用者修改後的新值
+                                        new_base = st.session_state.get(f"edit_base_{ts2_id}", "").strip()
+                                        new_tray = st.session_state.get(f"edit_tray_{ts2_id}", "").strip()
+                                        new_full = st.session_state.get(f"edit_full_{ts2_id}", "").strip()
+                                        new_jtag = st.session_state.get(f"edit_jtag_{ts2_id}", "無資料")
+                                        new_aot = st.session_state.get(f"edit_aot_{ts2_id}", "無資料")
+                                        new_ft = st.session_state.get(f"edit_ft_{ts2_id}", "無資料")
+
+                                        # 3. 更新 df_map 中的對應列 (因為讀取時欄位名改成了 TS2#，原寫入前要確定對應)
+                                        idx_update = df_map[df_map['TS2#'] == ts2_id].index
+                                        df_map.loc[idx_update, 'CSM BASE'] = new_base if new_base else "無資料"
+                                        df_map.loc[idx_update, 'CSM TRAY'] = new_tray if new_tray else "無資料"
+                                        df_map.loc[idx_update, 'FULL SYS'] = new_full if new_full else "無資料"
+                                        df_map.loc[idx_update, 'JTAG'] = new_jtag
+                                        df_map.loc[idx_update, 'AOT'] = new_aot
+                                        df_map.loc[idx_update, 'FT'] = new_ft
+
+                                        # 準備要覆蓋回去的 df (需要把 TS2# 改回原本的 NO. 避免破壞 Excel 原有欄位名稱)
+                                        df_upload = df_map.copy()
+                                        df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
+                                        # 如果 Excel 檔裡有把 "無資料" 當成空值，可以在這裡把 "無資料" 取代為 None (可選)
+                                        
+                                        # 4. 轉換為 Excel 的二進位資料
+                                        output = io.BytesIO()
+                                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                            df_upload.to_excel(writer, index=False)
+                                        excel_data = output.getvalue()
+                                        
+                                        # 5. 連線 GitHub API 進行檔案覆蓋
+                                        g = Github(st.secrets["GITHUB_TOKEN"])
+                                        repo = g.get_repo(st.secrets["GITHUB_REPO"])
+                                        
+                                        file_path = "TS2_mapping.xlsx" # 你的檔案在 repo 中的確切路徑
+                                        contents = repo.get_contents(file_path)
+                                        
+                                        repo.update_file(
+                                            path=contents.path,
+                                            message=f"Update TS2#{ts2_id} via Streamlit",
+                                            content=excel_data,
+                                            sha=contents.sha
+                                        )
+                                        
+                                        # 6. 清除快取，讓畫面重整後抓到最新資料
+                                        st.cache_data.clear()
+                                        st.success("✅ 成功同步至 GitHub！檔案已更新。")
+                                        
+                                    except Exception as e:
+                                        st.error(f"❌ 上傳失敗: {e}")
+                    else:
+                        st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
             st.error(f"⚠️ 找不到 {search_col} = `{search_val}` 的資料，請確認輸入是否有誤。")
