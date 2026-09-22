@@ -75,6 +75,8 @@ def load_note_data():
     df = pd.read_excel("TS2_note.xlsx", dtype=str)
     if 'NO.' in df.columns:
         df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
+    if 'NOTICE' not in df.columns:
+        df['NOTICE'] = '0'
     df.fillna("無資料", inplace=True)
     return df
 
@@ -331,27 +333,44 @@ with tab_status:
         elif state == "pass" or (state == "fail" and ts2_status_states[ts2_id] == "empty"):
             ts2_status_states[ts2_id] = state
 
-    dynamic_yellow_css_t3 = ""
-    t3_pass_cnt, t3_fail_cnt, t3_empty_cnt = 0, 0, 0
+    ts2_notice_states = {}
+    for idx, row in df_note.iterrows():
+        ts2_id = str(row['NO.']).strip()
+        notice_val = str(row.get('NOTICE', '0')).strip()
+        if notice_val.endswith('.0'): notice_val = notice_val[:-2]
+        ts2_notice_states[ts2_id] = notice_val
+
+    dynamic_custom_css_t3 = ""
+    t3_pass_cnt, t3_fail_cnt, t3_empty_cnt, t3_notice_cnt = 0, 0, 0, 0
     active_status_ts2 = st.session_state.get("status_active_ts2", "")
 
     for num in range(1, 100):
         state = ts2_status_states.get(str(num), "empty")
         is_selected = (str(num) == active_status_ts2)
+        has_notice = (ts2_notice_states.get(str(num)) == '1')
         
-        if state == "pass": t3_pass_cnt += 1
+        if has_notice: t3_notice_cnt += 1
+        elif state == "pass": t3_pass_cnt += 1
         elif state == "fail": t3_fail_cnt += 1
         else: t3_empty_cnt += 1
         
-        if not is_selected and state == "fail":
-            dynamic_yellow_css_t3 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
-            """
+        if not is_selected:
+            if has_notice:
+                # NOTICE 的機台強制顯示為醒目紅色
+                dynamic_custom_css_t3 += f"""
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }}
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}
+                """
+            elif state == "fail":
+                # FAIL 的機台顯示為黃色
+                dynamic_custom_css_t3 += f"""
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
+                """
             
-    if dynamic_yellow_css_t3: st.markdown(f"<style>{dynamic_yellow_css_t3}</style>", unsafe_allow_html=True)
+    if dynamic_custom_css_t3: st.markdown(f"<style>{dynamic_custom_css_t3}</style>", unsafe_allow_html=True)
 
-    panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: FT PASS({t3_pass_cnt}) / 黃色: FT FAIL({t3_fail_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
+    panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: PASS({t3_pass_cnt}) / 黃色: FAIL({t3_fail_cnt}) / 紅色: NOTICE({t3_notice_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
@@ -372,16 +391,20 @@ with tab_status:
             for idx, row in match_df.iterrows():
                 ts2_id = row['TS2#']
                 
-                # --- 取得 TS2_note 的資料 ---
                 note_row = df_note[df_note['NO.'] == str(ts2_id)]
                 val_note = note_row['NOTE'].values[0] if not note_row.empty else "無資料"
                 val_note_str = "" if pd.isna(val_note) or val_note == "無資料" else str(val_note)
+                val_notice = str(note_row['NOTICE'].values[0]).strip() if not note_row.empty else '0'
+                if val_notice.endswith('.0'): val_notice = val_notice[:-2]
                 
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
                     with c_title: st.markdown(f"### 🔹 系統標號：TS2#{ts2_id}")
                     with c_toggle: is_editing = st.toggle("✏️ 進入編輯模式", key=f"t3_toggle_{ts2_id}")
                     
+                    if val_notice == '1' and not is_editing:
+                        st.error("🚨 **此機台已設定特別標註 (NOTICE)**")
+
                     status_ext_opts = ["無資料", "ongoing", "hold", "NV debug", "OE debug", "Testing", "Other"]
                     def get_ext_status_idx(val):
                         if pd.isna(val) or str(val).strip() == "無資料": return 0
@@ -415,8 +438,8 @@ with tab_status:
                         val_fail_bin = val_fail_bin if pd.notna(val_fail_bin) and val_fail_bin != "無資料" else ""
                         new_fail_bin = st.text_input("Failure BIN", value=val_fail_bin, key=f"t3_edit_fail_bin_{ts2_id}")
 
-                        # ★ 新增：NOTE 編輯區塊 (支援多行輸入)
-                        st.markdown("#### 📝 備註 (儲存於 TS2_note.xlsx)")
+                        st.markdown("#### 📝 備註與標註 (儲存於 TS2_note.xlsx)")
+                        new_notice = st.checkbox("🚨 設定為特別標註 (紅色按鈕)", value=(val_notice == '1'), key=f"t3_edit_notice_{ts2_id}")
                         new_note = st.text_area("詳細備註內容", value=val_note_str, height=100, label_visibility="collapsed", key=f"t3_edit_note_{ts2_id}")
 
                         st.write("")
@@ -428,7 +451,6 @@ with tab_status:
                                     try:
                                         repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
                                         
-                                        # 1. 處理 Mapping 檔案
                                         idx_update = df_map[df_map['TS2#'] == ts2_id].index
                                         df_map.loc[idx_update, 'JTAG'] = new_jtag
                                         df_map.loc[idx_update, 'AOT'] = new_aot
@@ -444,12 +466,14 @@ with tab_status:
                                         contents_map = repo.get_contents("TS2_mapping.xlsx")
                                         repo.update_file(contents_map.path, f"Update TS2#{ts2_id} Mapping via Tab3", out_map.getvalue(), contents_map.sha)
 
-                                        # 2. 處理 Note 檔案
                                         idx_note = df_note[df_note['NO.'] == str(ts2_id)].index
+                                        new_notice_str = '1' if new_notice else '0'
+                                        
                                         if not idx_note.empty:
                                             df_note.loc[idx_note, 'NOTE'] = new_note.strip() or "無資料"
+                                            df_note.loc[idx_note, 'NOTICE'] = new_notice_str
                                         else:
-                                            new_row = pd.DataFrame([{"BUILD": "TS2", "NO.": str(ts2_id), "NOTE": new_note.strip() or "無資料"}])
+                                            new_row = pd.DataFrame([{"BUILD": "TS2", "NO.": str(ts2_id), "NOTE": new_note.strip() or "無資料", "NOTICE": new_notice_str}])
                                             df_note = pd.concat([df_note, new_row], ignore_index=True)
                                             
                                         out_note = io.BytesIO()
@@ -476,7 +500,6 @@ with tab_status:
                             f"**Failure BIN**: `{row.get('Failure BIN', '無資料')}`"
                         )
                         
-                        # ★ 新增：顯示獨立的 NOTE 區塊
                         st.markdown(f"**📝 詳細備註** (來自 TS2_note.xlsx):  \n> {val_note_str if val_note_str else '無資料'}")
         else:
             st.error(f"⚠️ 找不到該筆資料。")
