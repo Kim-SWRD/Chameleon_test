@@ -42,8 +42,44 @@ def load_rca_data():
 
 @st.cache_data(ttl=60)
 def load_mapping_data():
+    # 改回原來的檔名 TS2_mapping.xlsx
     df = pd.read_excel("TS2_mapping.xlsx", dtype=str)
+    
+    # 建立強健的「欄位名稱自動校正」機制
+    rename_dict = {}
+    for col in df.columns:
+        col_upper = str(col).upper()
+        if "NO." in col_upper or "TS2#" in col_upper:
+            rename_dict[col] = "NO."
+        elif "CSM BASE" in col_upper or "CSM_BASE" in col_upper:
+            rename_dict[col] = "CSM BASE"
+        elif "CSM TRAY" in col_upper or "CSM_TRAY" in col_upper:
+            rename_dict[col] = "CSM TRAY"
+        elif "FULL SYS" in col_upper or "FULL_SYS" in col_upper:
+            rename_dict[col] = "FULL SYS"
+        elif "JTAG" in col_upper:
+            rename_dict[col] = "JTAG"
+        elif "AOT" in col_upper:
+            rename_dict[col] = "AOT"
+        elif "FT" in col_upper:
+            rename_dict[col] = "FT"
+        elif "STATUS" in col_upper:
+            rename_dict[col] = "STATUS"
+        elif "OWNER" in col_upper:
+            rename_dict[col] = "OWNER"
+        elif "FAILURE BIN" in col_upper or "FAIL BIN" in col_upper or "NOTE" in col_upper:
+            rename_dict[col] = "Failure BIN"
+            
+    df.rename(columns=rename_dict, inplace=True)
+    
+    if 'NO.' not in df.columns:
+        st.error("Excel 中找不到包含 'NO.' 的欄位，請檢查檔案標題列是否有誤。")
+        st.stop()
+        
+    df['NO.'] = df['NO.'].ffill()
     df = df.dropna(subset=['NO.'])
+    df = df.groupby('NO.', as_index=False).first()
+    
     df["NO."] = df["NO."].astype(str).str.replace(r'\.0$', '', regex=True)
     df.rename(columns={"NO.": "TS2#"}, inplace=True) 
     df.fillna("無資料", inplace=True)
@@ -72,12 +108,13 @@ def get_station_idx(val):
 # ==========================================
 # 📑 建立頂部切換分頁
 # ==========================================
-tab_rca, tab_map, tab_status = st.tabs(["🔍 RCA 故障排除查詢", "🔄 TS2 SN Mapping 查詢", "📊 TS2目前STATUS"])
+tab_rca, tab_map, tab_status = st.tabs(["🔍 故障排除", "🔄 Mapping查詢", "📊 TS2 STATUS"])
 
 # ==========================================
-# 分頁 1: RCA 故障排除查詢
+# 分頁 1: 故障排除
 # ==========================================
 with tab_rca:
+    st.header("🔍 故障排除")
     with st.container(border=True):
         unique_stations = [x for x in df_rca["STATION"].unique() if x != "無資料"]
         station_options = ["ALL"] + unique_stations
@@ -137,9 +174,10 @@ with tab_rca:
 
 
 # ==========================================
-# 分頁 2: TS2 SN Mapping 查詢
+# 分頁 2: Mapping查詢
 # ==========================================
 with tab_map:
+    st.header("🔄 Mapping查詢")
     def set_ts2_search(num_str):
         st.session_state["map_col"] = "TS2#"
         st.session_state["map_search_input"] = num_str
@@ -278,6 +316,7 @@ with tab_map:
                                         excel_data = output.getvalue()
                                         g = Github(st.secrets["GITHUB_TOKEN"])
                                         repo = g.get_repo(st.secrets["GITHUB_REPO"])
+                                        # 恢復為 TS2_mapping.xlsx
                                         contents = repo.get_contents("TS2_mapping.xlsx")
                                         repo.update_file(contents.path, f"Update TS2#{ts2_id} via Streamlit", excel_data, contents.sha)
                                         st.cache_data.clear()
@@ -291,13 +330,13 @@ with tab_map:
 
 
 # ==========================================
-# 分頁 3: TS2目前STATUS
+# 分頁 3: TS2 STATUS
 # ==========================================
 with tab_status:
+    st.header("📊 TS2 STATUS")
     def set_ts2_status_search(num_str):
         st.session_state["status_active_ts2"] = num_str
 
-    # 更新邏輯：完全以 FT 欄位決定面板顏色
     def get_t3_state(row):
         ft_val = str(row.get('FT', '無資料')).strip().upper()
         if ft_val == "PASS":
@@ -305,7 +344,6 @@ with tab_status:
         elif ft_val == "FAIL":
             return "fail"
         else:
-            # 包含 "無資料" 或空白
             return "empty"
 
     ts2_status_states = {}
@@ -342,7 +380,7 @@ with tab_status:
     if dynamic_yellow_css_t3:
         st.markdown(f"<style>{dynamic_yellow_css_t3}</style>", unsafe_allow_html=True)
 
-    panel_title_t3 = f"🎛️ TS2目前STATUS快速面板 (綠色: FT PASS({t3_pass_cnt}) / 黃色: FT FAIL({t3_fail_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
+    panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: FT PASS({t3_pass_cnt}) / 黃色: FT FAIL({t3_fail_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
@@ -378,9 +416,12 @@ with tab_status:
                         return len(status_ext_opts) - 1
 
                     if is_editing:
-                        st.caption(f"**CSM BASE**: `{row.get('CSM BASE', '無資料')}` ｜ **CSM TRAY**: `{row.get('CSM TRAY', '無資料')}` ｜ **FULL SYS**: `{row.get('FULL SYS', '無資料')}`")
-                        st.divider()
-                        
+                        st.markdown(
+                            f"**CSM BASE**: <code style='font-size: 18px;'>{row.get('CSM BASE', '無資料')}</code><br>"
+                            f"**CSM TRAY**: <code style='font-size: 18px;'>{row.get('CSM TRAY', '無資料')}</code><br>"
+                            f"**FULL SYS**: <code style='font-size: 18px;'>{row.get('FULL SYS', '無資料')}</code>",
+                            unsafe_allow_html=True
+                        )
                         st.markdown("#### 🔍 站點狀態")
                         s1, s2, s3 = st.columns(3)
                         new_jtag = s1.selectbox("JTAG", station_opts, index=get_station_idx(row.get('JTAG')), key=f"t3_edit_jtag_{ts2_id}")
@@ -393,8 +434,10 @@ with tab_status:
                         new_status = e1.selectbox("STATUS", status_ext_opts, index=get_ext_status_idx(row.get('STATUS')), key=f"t3_edit_status_{ts2_id}")
                         val_owner = row['OWNER'] if pd.notna(row['OWNER']) and row['OWNER'] != "無資料" else ""
                         new_owner = e2.text_input("OWNER", value=val_owner, key=f"t3_edit_owner_{ts2_id}")
-                        val_note = row['NOTE'] if pd.notna(row['NOTE']) and row['NOTE'] != "無資料" else ""
-                        new_note = st.text_input("NOTE", value=val_note, key=f"t3_edit_note_{ts2_id}")
+                        
+                        val_fail_bin = row.get('Failure BIN', '無資料')
+                        val_fail_bin = val_fail_bin if pd.notna(val_fail_bin) and val_fail_bin != "無資料" else ""
+                        new_fail_bin = st.text_input("Failure BIN", value=val_fail_bin, key=f"t3_edit_fail_bin_{ts2_id}")
 
                         st.write("")
                         if st.button("💾 儲存修改並同步至 GitHub", key=f"t3_save_btn_{ts2_id}", type="primary", use_container_width=True):
@@ -409,7 +452,7 @@ with tab_status:
                                         df_map.loc[idx_update, 'FT'] = new_ft
                                         df_map.loc[idx_update, 'STATUS'] = new_status
                                         df_map.loc[idx_update, 'OWNER'] = new_owner.strip() or "無資料"
-                                        df_map.loc[idx_update, 'NOTE'] = new_note.strip() or "無資料"
+                                        df_map.loc[idx_update, 'Failure BIN'] = new_fail_bin.strip() or "無資料"
 
                                         df_upload = df_map.copy()
                                         df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
@@ -418,6 +461,7 @@ with tab_status:
                                         excel_data = output.getvalue()
                                         g = Github(st.secrets["GITHUB_TOKEN"])
                                         repo = g.get_repo(st.secrets["GITHUB_REPO"])
+                                        # 恢復為 TS2_mapping.xlsx
                                         contents = repo.get_contents("TS2_mapping.xlsx")
                                         repo.update_file(contents.path, f"Update TS2#{ts2_id} via Tab3", excel_data, contents.sha)
                                         st.cache_data.clear()
@@ -425,14 +469,18 @@ with tab_status:
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
-                        st.caption(f"**CSM BASE**: `{row.get('CSM BASE', '無資料')}` ｜ **CSM TRAY**: `{row.get('CSM TRAY', '無資料')}` ｜ **FULL SYS**: `{row.get('FULL SYS', '無資料')}`")
-                        st.divider()
-                        st.markdown(f"#### 🔍 JTAG: `{row.get('JTAG', '無資料')}` ｜ AOT: `{row.get('AOT', '無資料')}` ｜ FT: `{row.get('FT', '無資料')}`")
+                        st.markdown(
+                            f"**CSM BASE**: <code style='font-size: 18px;'>{row.get('CSM BASE', '無資料')}</code><br>"
+                            f"**CSM TRAY**: <code style='font-size: 18px;'>{row.get('CSM TRAY', '無資料')}</code><br>"
+                            f"**FULL SYS**: <code style='font-size: 18px;'>{row.get('FULL SYS', '無資料')}</code>",
+                            unsafe_allow_html=True
+                        )
+                        st.markdown(f"🔍 **JTAG**: `{row.get('JTAG', '無資料')}` ｜ **AOT**: `{row.get('AOT', '無資料')}` ｜ **FT**: `{row.get('FT', '無資料')}`")
                         st.divider()
                         st.info(
                             f"**STATUS**: `{row.get('STATUS', '無資料')}`  \n"
                             f"**OWNER**: `{row.get('OWNER', '無資料')}`  \n"
-                            f"**NOTE**: `{row.get('NOTE', '無資料')}`"
+                            f"**Failure BIN**: `{row.get('Failure BIN', '無資料')}`"
                         )
         else:
             st.error(f"⚠️ 找不到該筆資料。")
