@@ -170,7 +170,6 @@ with tab_map:
         temp_df = df_map[df_map[current_search_col] == query_val]
         active_ts2_numbers = set(temp_df["TS2#"].dropna().astype(str).tolist())
 
-    # --- ★ 精準鎖定面板2的黃色 CSS ★ ---
     dynamic_yellow_css_t2 = ""
     full_cnt, partial_cnt, empty_cnt = 0, 0, 0
     
@@ -298,19 +297,16 @@ with tab_status:
     def set_ts2_status_search(num_str):
         st.session_state["status_active_ts2"] = num_str
 
+    # 更新邏輯：完全以 FT 欄位決定面板顏色
     def get_t3_state(row):
-        is_empty = True
-        for col in ['CSM BASE', 'CSM TRAY', 'FULL SYS', 'JTAG', 'AOT', 'FT', 'STATUS', 'OWNER', 'NOTE']:
-            val = row.get(col, "無資料")
-            if pd.notna(val) and str(val).strip() not in ["", "無資料", "nan", "NaN"]:
-                is_empty = False
-                break
-        
-        if is_empty: return "empty"
-        
         ft_val = str(row.get('FT', '無資料')).strip().upper()
-        if ft_val == "PASS": return "pass"
-        return "fail"
+        if ft_val == "PASS":
+            return "pass"
+        elif ft_val == "FAIL":
+            return "fail"
+        else:
+            # 包含 "無資料" 或空白
+            return "empty"
 
     ts2_status_states = {}
     for idx, row in df_map.iterrows():
@@ -321,7 +317,6 @@ with tab_status:
         elif state == "pass" or (state == "fail" and ts2_status_states[ts2_id] == "empty"):
             ts2_status_states[ts2_id] = state
 
-    # --- ★ 精準鎖定面板3的黃色 CSS ★ ---
     dynamic_yellow_css_t3 = ""
     t3_pass_cnt, t3_fail_cnt, t3_empty_cnt = 0, 0, 0
     active_status_ts2 = st.session_state.get("status_active_ts2", "")
@@ -347,7 +342,7 @@ with tab_status:
     if dynamic_yellow_css_t3:
         st.markdown(f"<style>{dynamic_yellow_css_t3}</style>", unsafe_allow_html=True)
 
-    panel_title_t3 = f"🎛️ TS2目前STATUS快速面板 (綠色: FT PASS({t3_pass_cnt}) / 黃色: FT非PASS({t3_fail_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
+    panel_title_t3 = f"🎛️ TS2目前STATUS快速面板 (綠色: FT PASS({t3_pass_cnt}) / 黃色: FT FAIL({t3_fail_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
@@ -383,7 +378,6 @@ with tab_status:
                         return len(status_ext_opts) - 1
 
                     if is_editing:
-                        # 唯讀顯示 SN，移除文字輸入框
                         st.caption(f"**CSM BASE**: `{row.get('CSM BASE', '無資料')}` ｜ **CSM TRAY**: `{row.get('CSM TRAY', '無資料')}` ｜ **FULL SYS**: `{row.get('FULL SYS', '無資料')}`")
                         st.divider()
                         
@@ -410,7 +404,6 @@ with tab_status:
                                 with st.spinner("🔄 正在更新並上傳..."):
                                     try:
                                         idx_update = df_map[df_map['TS2#'] == ts2_id].index
-                                        # 在這分頁不再異動 CSM SN
                                         df_map.loc[idx_update, 'JTAG'] = new_jtag
                                         df_map.loc[idx_update, 'AOT'] = new_aot
                                         df_map.loc[idx_update, 'FT'] = new_ft
@@ -434,10 +427,8 @@ with tab_status:
                     else:
                         st.caption(f"**CSM BASE**: `{row.get('CSM BASE', '無資料')}` ｜ **CSM TRAY**: `{row.get('CSM TRAY', '無資料')}` ｜ **FULL SYS**: `{row.get('FULL SYS', '無資料')}`")
                         st.divider()
-                        # 縮小站點狀態的字體 (改為 H4 等級，看起來比較舒服)
                         st.markdown(f"#### 🔍 JTAG: `{row.get('JTAG', '無資料')}` ｜ AOT: `{row.get('AOT', '無資料')}` ｜ FT: `{row.get('FT', '無資料')}`")
                         st.divider()
-                        # 附加資訊各獨立一行
                         st.info(
                             f"**STATUS**: `{row.get('STATUS', '無資料')}`  \n"
                             f"**OWNER**: `{row.get('OWNER', '無資料')}`  \n"
