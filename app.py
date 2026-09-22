@@ -10,8 +10,8 @@ st.markdown("""
 <style>
 button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
 button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
-button[kind="tertiary"] { background-color: #ff9800 !important; border-color: #ff9800 !important; color: white !important; }
-button[kind="tertiary"]:hover { background-color: #e68a00 !important; border-color: #e68a00 !important; }
+button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
+button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
 button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
 /* CSS Grid 強制 10 欄網格佈局 */
@@ -29,10 +29,9 @@ div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visib
 """, unsafe_allow_html=True)
 
 # --- 初始化 Session State ---
-if "map_col" not in st.session_state:
-    st.session_state["map_col"] = "TS2#"
-if "map_search_input" not in st.session_state:
-    st.session_state["map_search_input"] = ""
+if "map_col" not in st.session_state: st.session_state["map_col"] = "TS2#"
+if "map_search_input" not in st.session_state: st.session_state["map_search_input"] = ""
+if "status_active_ts2" not in st.session_state: st.session_state["status_active_ts2"] = ""
 
 # --- 讀取與快取資料 ---
 @st.cache_data(ttl=60)
@@ -62,10 +61,18 @@ except FileNotFoundError:
     st.error("找不到 TS2_mapping.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
     st.stop()
 
+station_opts = ["無資料", "PASS", "FAIL"]
+def get_station_idx(val):
+    if pd.isna(val) or str(val).strip() == "無資料": return 0
+    v = str(val).strip().upper()
+    if v == "PASS": return 1
+    if v == "FAIL": return 2
+    return 0
+
 # ==========================================
 # 📑 建立頂部切換分頁
 # ==========================================
-tab_rca, tab_map = st.tabs(["🔍 RCA 故障排除查詢", "🔄 TS2 SN Mapping 查詢"])
+tab_rca, tab_map, tab_status = st.tabs(["🔍 RCA 故障排除查詢", "🔄 TS2 SN Mapping 查詢", "📊 TS2目前STATUS"])
 
 # ==========================================
 # 分頁 1: RCA 故障排除查詢
@@ -74,19 +81,12 @@ with tab_rca:
     with st.container(border=True):
         unique_stations = [x for x in df_rca["STATION"].unique() if x != "無資料"]
         station_options = ["ALL"] + unique_stations
-        
         selected_station = st.selectbox("📌 選擇站別", station_options, key="rca_station")
-        
-        if selected_station == "ALL":
-            base_df = df_rca
-        else:
-            base_df = df_rca[df_rca["STATION"] == selected_station]
+        base_df = df_rca if selected_station == "ALL" else df_rca[df_rca["STATION"] == selected_station]
 
         search_method = st.radio("🔍 第一步：選擇查詢方式", ["使用 BIN_CODE", "使用 BIN"], horizontal=True, key="rca_method")
-
         filtered_df = pd.DataFrame()
         selected_sub_bin = None
-        
         display_bin_code = ""
         display_bin = ""
 
@@ -130,26 +130,35 @@ with tab_rca:
                 solution_text = str(row['Solution']).replace('\\n', '\n').replace('\n', '  \n')
                 st.error(f"**🚨 可能原因 (Cause):**  \n{cause_text}")
                 st.success(f"**✅ 解決方案 (Solution):**  \n{solution_text}")
-                
                 meta_info = []
-                if row['Ref Log'] != "無資料":
-                    meta_info.append(f"**Log:** {row['Ref Log']}")
-                if row['REV'] != "無資料":
-                    meta_info.append(f"**REV:** {row['REV']}")
-                if meta_info:
-                    st.caption(" | ".join(meta_info))
+                if row['Ref Log'] != "無資料": meta_info.append(f"**Log:** {row['Ref Log']}")
+                if row['REV'] != "無資料": meta_info.append(f"**REV:** {row['REV']}")
+                if meta_info: st.caption(" | ".join(meta_info))
+
 
 # ==========================================
-# 分頁 2: TS2 SN Mapping 查詢 (含 GitHub 上傳功能)
+# 分頁 2: TS2 SN Mapping 查詢
 # ==========================================
 with tab_map:
     def set_ts2_search(num_str):
         st.session_state["map_col"] = "TS2#"
         st.session_state["map_search_input"] = num_str
 
-    valid_ts2 = set(df_map["TS2#"].dropna().astype(str).tolist())
-    valid_count = sum(1 for i in range(1, 100) if str(i) in valid_ts2)
-    
+    def get_sn_count(row):
+        cnt = 0
+        for col in ['CSM BASE', 'CSM TRAY', 'FULL SYS']:
+            val = row.get(col, "無資料")
+            if pd.notna(val) and str(val).strip() not in ["", "無資料", "nan", "NaN"]:
+                cnt += 1
+        return cnt
+
+    ts2_sn_counts = {}
+    for idx, row in df_map.iterrows():
+        ts2_id = str(row['TS2#']).strip()
+        cnt = get_sn_count(row)
+        if ts2_id not in ts2_sn_counts or cnt > ts2_sn_counts[ts2_id]:
+            ts2_sn_counts[ts2_id] = cnt
+
     current_search_col = st.session_state.get("map_col", "TS2#")
     current_search_val = st.session_state.get("map_search_input", "").strip()
     active_ts2_numbers = set()
@@ -161,170 +170,278 @@ with tab_map:
         temp_df = df_map[df_map[current_search_col] == query_val]
         active_ts2_numbers = set(temp_df["TS2#"].dropna().astype(str).tolist())
 
-    panel_title = f"🎛️ TS2# 快速點選面板 (綠色: 有資料 ({valid_count}筆) / 橘色: 目前選取)"
-    with st.expander(panel_title, expanded=True):
-        for row in range(10):
-            cols = st.columns(10)
-            for col_idx in range(10):
-                num = row * 10 + col_idx + 1
-                if num > 99:
-                    break
+    # --- ★ 精準鎖定面板2的黃色 CSS ★ ---
+    dynamic_yellow_css_t2 = ""
+    full_cnt, partial_cnt, empty_cnt = 0, 0, 0
+    
+    for num in range(1, 100):
+        c = ts2_sn_counts.get(str(num), 0)
+        is_selected = str(num) in active_ts2_numbers
+        
+        if c == 3: full_cnt += 1
+        elif c in [1, 2]: partial_cnt += 1
+        else: empty_cnt += 1
+        
+        if not is_selected and c in [1, 2]:
+            dynamic_yellow_css_t2 += f"""
+            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{
+                background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important;
+            }}
+            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{
+                background-color: #e0a800 !important; border-color: #e0a800 !important;
+            }}
+            """
+    
+    if dynamic_yellow_css_t2:
+        st.markdown(f"<style>{dynamic_yellow_css_t2}</style>", unsafe_allow_html=True)
+
+    panel_title_t2 = f"🎛️ TS2# 快速點選面板 (綠色: 完整({full_cnt}) / 黃色: 缺件({partial_cnt}) / 灰色: 無資料({empty_cnt}) / 藍色: 選取)"
+    
+    with st.expander(panel_title_t2, expanded=True):
+        st.markdown('<div class="t2-panel" style="display:none;"></div>', unsafe_allow_html=True)
+        cols = st.columns(99)
+        for num in range(1, 100):
+            c = ts2_sn_counts.get(str(num), 0)
+            is_selected = str(num) in active_ts2_numbers
+            
+            if is_selected: btn_type = "tertiary"
+            elif c == 3: btn_type = "primary"
+            else: btn_type = "secondary"
                 
-                is_valid = str(num) in valid_ts2
-                is_selected = str(num) in active_ts2_numbers
-                
-                if is_selected:
-                    btn_type = "tertiary"
-                elif is_valid:
-                    btn_type = "primary"
-                else:
-                    btn_type = "secondary"
-                
-                cols[col_idx].button(
-                    str(num), 
-                    key=f"btn_quick_{num}", 
-                    on_click=set_ts2_search, 
-                    args=(str(num),),
-                    type=btn_type,
-                    use_container_width=True
-                )
+            cols[num-1].button(str(num), key=f"btn_t2_{num}", on_click=set_ts2_search, args=(str(num),), type=btn_type, use_container_width=True)
 
     with st.container(border=True):
         st.markdown("輸入 **TS2# NO.** (例如: 2), 或是輸入 **CSM BASE, CSM TRAY, FULL SYS** 任意一組 SN，即可互相反查。")
-        
         map_cols = ["TS2#", "CSM BASE", "CSM TRAY", "FULL SYS"]
-        
         col1, col2 = st.columns([1, 2])
-        with col1:
-            search_col = st.selectbox("📌 選擇查詢條件", map_cols, key="map_col")
-        with col2:
-            search_val = st.text_input(f"✍️ 請輸入 {search_col}", key="map_search_input").strip()
+        with col1: search_col = st.selectbox("📌 選擇查詢條件", map_cols, key="map_col")
+        with col2: search_val = st.text_input(f"✍️ 請輸入 {search_col}", key="map_search_input").strip()
             
     if search_val:
-        if search_col == "TS2#":
-            search_val = search_val.upper().replace("TS2#", "").replace("TS#", "").strip()
-        
+        if search_col == "TS2#": search_val = search_val.upper().replace("TS2#", "").replace("TS#", "").strip()
         match_df = df_map[df_map[search_col] == search_val]
         
         if not match_df.empty:
             st.success("✅ 找到對應的 SN 關聯資料！")
-            
             for idx, row in match_df.iterrows():
-                # 紀錄當前的 TS2#
                 ts2_id = row['TS2#']
-                
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
-                    with c_title:
-                        st.markdown(f"### 🔹 系統標號：TS2#{ts2_id}")
-                    with c_toggle:
-                        is_editing = st.toggle("✏️ 進入編輯模式", key=f"toggle_{ts2_id}")
+                    with c_title: st.markdown(f"### 🔹 系統標號：TS2#{ts2_id}")
+                    with c_toggle: is_editing = st.toggle("✏️ 進入編輯模式", key=f"t2_toggle_{ts2_id}")
                     
                     c1, c2, c3 = st.columns(3)
-                    
                     with c1:
                         st.markdown("**CSM BASE**")
                         val_base = row['CSM BASE'] if pd.notna(row['CSM BASE']) and row['CSM BASE'] != "無資料" else ""
-                        if is_editing:
-                            st.text_input("CSM BASE", value=val_base, label_visibility="collapsed", key=f"edit_base_{ts2_id}")
-                        else:
-                            st.code(val_base if val_base else "無資料", language="plaintext")
+                        if is_editing: st.text_input("CSM BASE", value=val_base, label_visibility="collapsed", key=f"t2_edit_base_{ts2_id}")
+                        else: st.code(val_base if val_base else "無資料", language="plaintext")
                             
                     with c2:
                         st.markdown("**CSM TRAY**")
                         val_tray = row['CSM TRAY'] if pd.notna(row['CSM TRAY']) and row['CSM TRAY'] != "無資料" else ""
-                        if is_editing:
-                            st.text_input("CSM TRAY", value=val_tray, label_visibility="collapsed", key=f"edit_tray_{ts2_id}")
-                        else:
-                            st.code(val_tray if val_tray else "無資料", language="plaintext")
+                        if is_editing: st.text_input("CSM TRAY", value=val_tray, label_visibility="collapsed", key=f"t2_edit_tray_{ts2_id}")
+                        else: st.code(val_tray if val_tray else "無資料", language="plaintext")
                             
                     with c3:
                         st.markdown("**FULL SYS**")
                         val_full = row['FULL SYS'] if pd.notna(row['FULL SYS']) and row['FULL SYS'] != "無資料" else ""
-                        if is_editing:
-                            st.text_input("FULL SYS", value=val_full, label_visibility="collapsed", key=f"edit_full_{ts2_id}")
-                        else:
-                            st.code(val_full if val_full else "無資料", language="plaintext")
+                        if is_editing: st.text_input("FULL SYS", value=val_full, label_visibility="collapsed", key=f"t2_edit_full_{ts2_id}")
+                        else: st.code(val_full if val_full else "無資料", language="plaintext")
                     
                     if is_editing:
                         st.divider()
                         st.markdown("#### 🔍 站點狀態")
                         s_c1, s_c2, s_c3 = st.columns(3)
-                        status_opts = ["無資料", "PASS", "FAIL"]
-                        
-                        def get_opt_idx(val):
-                            if pd.isna(val) or str(val).strip() == "無資料": return 0
-                            v = str(val).strip().upper()
-                            if v == "PASS": return 1
-                            if v == "FAIL": return 2
-                            return 0
-
-                        with s_c1:
-                            st.selectbox("JTAG", status_opts, index=get_opt_idx(row.get('JTAG')), key=f"edit_jtag_{ts2_id}")
-                        with s_c2:
-                            st.selectbox("AOT", status_opts, index=get_opt_idx(row.get('AOT')), key=f"edit_aot_{ts2_id}")
-                        with s_c3:
-                            st.selectbox("FT", status_opts, index=get_opt_idx(row.get('FT')), key=f"edit_ft_{ts2_id}")
+                        with s_c1: st.selectbox("JTAG", station_opts, index=get_station_idx(row.get('JTAG')), key=f"t2_edit_jtag_{ts2_id}")
+                        with s_c2: st.selectbox("AOT", station_opts, index=get_station_idx(row.get('AOT')), key=f"t2_edit_aot_{ts2_id}")
+                        with s_c3: st.selectbox("FT", station_opts, index=get_station_idx(row.get('FT')), key=f"t2_edit_ft_{ts2_id}")
                             
                         st.write("") 
-                        
-                        # ★ 實際的儲存與上傳邏輯 ★
-                        if st.button("💾 儲存修改並同步至 GitHub", type="primary", use_container_width=True):
-                            # 1. 檢查是否有設定 Secrets
+                        if st.button("💾 儲存修改並同步至 GitHub", key=f"t2_save_btn_{ts2_id}", type="primary", use_container_width=True):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定 GitHub Token 或 Repo！請先在 .streamlit/secrets.toml 中設定。")
+                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
                             else:
-                                with st.spinner("🔄 正在更新並上傳至 GitHub..."):
+                                with st.spinner("🔄 正在更新並上傳..."):
                                     try:
-                                        # 2. 取得使用者修改後的新值
-                                        new_base = st.session_state.get(f"edit_base_{ts2_id}", "").strip()
-                                        new_tray = st.session_state.get(f"edit_tray_{ts2_id}", "").strip()
-                                        new_full = st.session_state.get(f"edit_full_{ts2_id}", "").strip()
-                                        new_jtag = st.session_state.get(f"edit_jtag_{ts2_id}", "無資料")
-                                        new_aot = st.session_state.get(f"edit_aot_{ts2_id}", "無資料")
-                                        new_ft = st.session_state.get(f"edit_ft_{ts2_id}", "無資料")
-
-                                        # 3. 更新 df_map 中的對應列 (因為讀取時欄位名改成了 TS2#，原寫入前要確定對應)
                                         idx_update = df_map[df_map['TS2#'] == ts2_id].index
-                                        df_map.loc[idx_update, 'CSM BASE'] = new_base if new_base else "無資料"
-                                        df_map.loc[idx_update, 'CSM TRAY'] = new_tray if new_tray else "無資料"
-                                        df_map.loc[idx_update, 'FULL SYS'] = new_full if new_full else "無資料"
-                                        df_map.loc[idx_update, 'JTAG'] = new_jtag
-                                        df_map.loc[idx_update, 'AOT'] = new_aot
-                                        df_map.loc[idx_update, 'FT'] = new_ft
+                                        df_map.loc[idx_update, 'CSM BASE'] = st.session_state.get(f"t2_edit_base_{ts2_id}", "").strip() or "無資料"
+                                        df_map.loc[idx_update, 'CSM TRAY'] = st.session_state.get(f"t2_edit_tray_{ts2_id}", "").strip() or "無資料"
+                                        df_map.loc[idx_update, 'FULL SYS'] = st.session_state.get(f"t2_edit_full_{ts2_id}", "").strip() or "無資料"
+                                        df_map.loc[idx_update, 'JTAG'] = st.session_state.get(f"t2_edit_jtag_{ts2_id}", "無資料")
+                                        df_map.loc[idx_update, 'AOT'] = st.session_state.get(f"t2_edit_aot_{ts2_id}", "無資料")
+                                        df_map.loc[idx_update, 'FT'] = st.session_state.get(f"t2_edit_ft_{ts2_id}", "無資料")
 
-                                        # 準備要覆蓋回去的 df (需要把 TS2# 改回原本的 NO. 避免破壞 Excel 原有欄位名稱)
                                         df_upload = df_map.copy()
                                         df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
-                                        # 如果 Excel 檔裡有把 "無資料" 當成空值，可以在這裡把 "無資料" 取代為 None (可選)
-                                        
-                                        # 4. 轉換為 Excel 的二進位資料
                                         output = io.BytesIO()
-                                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                                            df_upload.to_excel(writer, index=False)
+                                        with pd.ExcelWriter(output, engine='openpyxl') as writer: df_upload.to_excel(writer, index=False)
                                         excel_data = output.getvalue()
-                                        
-                                        # 5. 連線 GitHub API 進行檔案覆蓋
                                         g = Github(st.secrets["GITHUB_TOKEN"])
                                         repo = g.get_repo(st.secrets["GITHUB_REPO"])
-                                        
-                                        file_path = "TS2_mapping.xlsx" # 你的檔案在 repo 中的確切路徑
-                                        contents = repo.get_contents(file_path)
-                                        
-                                        repo.update_file(
-                                            path=contents.path,
-                                            message=f"Update TS2#{ts2_id} via Streamlit",
-                                            content=excel_data,
-                                            sha=contents.sha
-                                        )
-                                        
-                                        # 6. 清除快取，讓畫面重整後抓到最新資料
+                                        contents = repo.get_contents("TS2_mapping.xlsx")
+                                        repo.update_file(contents.path, f"Update TS2#{ts2_id} via Streamlit", excel_data, contents.sha)
                                         st.cache_data.clear()
-                                        st.success("✅ 成功同步至 GitHub！檔案已更新。")
-                                        
+                                        st.success("✅ 成功同步至 GitHub！")
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
                         st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
-            st.error(f"⚠️ 找不到 {search_col} = `{search_val}` 的資料，請確認輸入是否有誤。")
+            st.error(f"⚠️ 找不到資料，請確認輸入是否有誤。")
+
+
+# ==========================================
+# 分頁 3: TS2目前STATUS
+# ==========================================
+with tab_status:
+    def set_ts2_status_search(num_str):
+        st.session_state["status_active_ts2"] = num_str
+
+    def get_t3_state(row):
+        is_empty = True
+        for col in ['CSM BASE', 'CSM TRAY', 'FULL SYS', 'JTAG', 'AOT', 'FT', 'STATUS', 'OWNER', 'NOTE']:
+            val = row.get(col, "無資料")
+            if pd.notna(val) and str(val).strip() not in ["", "無資料", "nan", "NaN"]:
+                is_empty = False
+                break
+        
+        if is_empty: return "empty"
+        
+        ft_val = str(row.get('FT', '無資料')).strip().upper()
+        if ft_val == "PASS": return "pass"
+        return "fail"
+
+    ts2_status_states = {}
+    for idx, row in df_map.iterrows():
+        ts2_id = str(row['TS2#']).strip()
+        state = get_t3_state(row)
+        if ts2_id not in ts2_status_states:
+            ts2_status_states[ts2_id] = state
+        elif state == "pass" or (state == "fail" and ts2_status_states[ts2_id] == "empty"):
+            ts2_status_states[ts2_id] = state
+
+    # --- ★ 精準鎖定面板3的黃色 CSS ★ ---
+    dynamic_yellow_css_t3 = ""
+    t3_pass_cnt, t3_fail_cnt, t3_empty_cnt = 0, 0, 0
+    active_status_ts2 = st.session_state.get("status_active_ts2", "")
+
+    for num in range(1, 100):
+        state = ts2_status_states.get(str(num), "empty")
+        is_selected = (str(num) == active_status_ts2)
+        
+        if state == "pass": t3_pass_cnt += 1
+        elif state == "fail": t3_fail_cnt += 1
+        else: t3_empty_cnt += 1
+        
+        if not is_selected and state == "fail":
+            dynamic_yellow_css_t3 += f"""
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{
+                background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important;
+            }}
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{
+                background-color: #e0a800 !important; border-color: #e0a800 !important;
+            }}
+            """
+            
+    if dynamic_yellow_css_t3:
+        st.markdown(f"<style>{dynamic_yellow_css_t3}</style>", unsafe_allow_html=True)
+
+    panel_title_t3 = f"🎛️ TS2目前STATUS快速面板 (綠色: FT PASS({t3_pass_cnt}) / 黃色: FT非PASS({t3_fail_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
+    
+    with st.expander(panel_title_t3, expanded=True):
+        st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
+        cols = st.columns(99)
+        for num in range(1, 100):
+            state = ts2_status_states.get(str(num), "empty")
+            is_selected = (str(num) == active_status_ts2)
+            
+            if is_selected: btn_type = "tertiary"
+            elif state == "pass": btn_type = "primary"
+            else: btn_type = "secondary"
+                
+            cols[num-1].button(str(num), key=f"btn_t3_{num}", on_click=set_ts2_status_search, args=(str(num),), type=btn_type, use_container_width=True)
+
+    if active_status_ts2:
+        match_df = df_map[df_map['TS2#'] == active_status_ts2]
+        if not match_df.empty:
+            for idx, row in match_df.iterrows():
+                ts2_id = row['TS2#']
+                
+                with st.container(border=True):
+                    c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
+                    with c_title: st.markdown(f"### 🔹 系統標號：TS2#{ts2_id}")
+                    with c_toggle: is_editing = st.toggle("✏️ 進入編輯模式", key=f"t3_toggle_{ts2_id}")
+                    
+                    status_ext_opts = ["無資料", "ongoing", "hold", "NV debug", "OE debug", "Testing", "Other"]
+                    def get_ext_status_idx(val):
+                        if pd.isna(val) or str(val).strip() == "無資料": return 0
+                        v = str(val).strip()
+                        for i, opt in enumerate(status_ext_opts):
+                            if v.lower() == opt.lower(): return i
+                        status_ext_opts.append(v)
+                        return len(status_ext_opts) - 1
+
+                    if is_editing:
+                        # 唯讀顯示 SN，移除文字輸入框
+                        st.caption(f"**CSM BASE**: `{row.get('CSM BASE', '無資料')}` ｜ **CSM TRAY**: `{row.get('CSM TRAY', '無資料')}` ｜ **FULL SYS**: `{row.get('FULL SYS', '無資料')}`")
+                        st.divider()
+                        
+                        st.markdown("#### 🔍 站點狀態")
+                        s1, s2, s3 = st.columns(3)
+                        new_jtag = s1.selectbox("JTAG", station_opts, index=get_station_idx(row.get('JTAG')), key=f"t3_edit_jtag_{ts2_id}")
+                        new_aot = s2.selectbox("AOT", station_opts, index=get_station_idx(row.get('AOT')), key=f"t3_edit_aot_{ts2_id}")
+                        new_ft = s3.selectbox("FT", station_opts, index=get_station_idx(row.get('FT')), key=f"t3_edit_ft_{ts2_id}")
+
+                        st.divider()
+                        st.markdown("#### 📋 附加資訊")
+                        e1, e2 = st.columns(2)
+                        new_status = e1.selectbox("STATUS", status_ext_opts, index=get_ext_status_idx(row.get('STATUS')), key=f"t3_edit_status_{ts2_id}")
+                        val_owner = row['OWNER'] if pd.notna(row['OWNER']) and row['OWNER'] != "無資料" else ""
+                        new_owner = e2.text_input("OWNER", value=val_owner, key=f"t3_edit_owner_{ts2_id}")
+                        val_note = row['NOTE'] if pd.notna(row['NOTE']) and row['NOTE'] != "無資料" else ""
+                        new_note = st.text_input("NOTE", value=val_note, key=f"t3_edit_note_{ts2_id}")
+
+                        st.write("")
+                        if st.button("💾 儲存修改並同步至 GitHub", key=f"t3_save_btn_{ts2_id}", type="primary", use_container_width=True):
+                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                            else:
+                                with st.spinner("🔄 正在更新並上傳..."):
+                                    try:
+                                        idx_update = df_map[df_map['TS2#'] == ts2_id].index
+                                        # 在這分頁不再異動 CSM SN
+                                        df_map.loc[idx_update, 'JTAG'] = new_jtag
+                                        df_map.loc[idx_update, 'AOT'] = new_aot
+                                        df_map.loc[idx_update, 'FT'] = new_ft
+                                        df_map.loc[idx_update, 'STATUS'] = new_status
+                                        df_map.loc[idx_update, 'OWNER'] = new_owner.strip() or "無資料"
+                                        df_map.loc[idx_update, 'NOTE'] = new_note.strip() or "無資料"
+
+                                        df_upload = df_map.copy()
+                                        df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
+                                        output = io.BytesIO()
+                                        with pd.ExcelWriter(output, engine='openpyxl') as writer: df_upload.to_excel(writer, index=False)
+                                        excel_data = output.getvalue()
+                                        g = Github(st.secrets["GITHUB_TOKEN"])
+                                        repo = g.get_repo(st.secrets["GITHUB_REPO"])
+                                        contents = repo.get_contents("TS2_mapping.xlsx")
+                                        repo.update_file(contents.path, f"Update TS2#{ts2_id} via Tab3", excel_data, contents.sha)
+                                        st.cache_data.clear()
+                                        st.success("✅ 成功同步至 GitHub！")
+                                    except Exception as e:
+                                        st.error(f"❌ 上傳失敗: {e}")
+                    else:
+                        st.caption(f"**CSM BASE**: `{row.get('CSM BASE', '無資料')}` ｜ **CSM TRAY**: `{row.get('CSM TRAY', '無資料')}` ｜ **FULL SYS**: `{row.get('FULL SYS', '無資料')}`")
+                        st.divider()
+                        # 縮小站點狀態的字體 (改為 H4 等級，看起來比較舒服)
+                        st.markdown(f"#### 🔍 JTAG: `{row.get('JTAG', '無資料')}` ｜ AOT: `{row.get('AOT', '無資料')}` ｜ FT: `{row.get('FT', '無資料')}`")
+                        st.divider()
+                        # 附加資訊各獨立一行
+                        st.info(
+                            f"**STATUS**: `{row.get('STATUS', '無資料')}`  \n"
+                            f"**OWNER**: `{row.get('OWNER', '無資料')}`  \n"
+                            f"**NOTE**: `{row.get('NOTE', '無資料')}`"
+                        )
+        else:
+            st.error(f"⚠️ 找不到該筆資料。")
