@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import time
 from github import Github
 
 st.set_page_config(page_title="卡美問題與 SN 查詢", layout="centered")
@@ -295,13 +296,20 @@ with tab_map:
 
                                         df_upload = df_map.copy()
                                         df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
+                                        
+                                        # ★ 關鍵修正：同步儲存檔案至本機環境
+                                        df_upload.to_excel("TS2_mapping.xlsx", index=False)
+                                        
                                         output = io.BytesIO()
                                         with pd.ExcelWriter(output, engine='openpyxl') as writer: df_upload.to_excel(writer, index=False)
                                         repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
                                         contents = repo.get_contents("TS2_mapping.xlsx")
                                         repo.update_file(contents.path, f"Update TS2#{ts2_id} via Streamlit", output.getvalue(), contents.sha)
+                                        
                                         st.cache_data.clear()
-                                        st.success("✅ 成功同步至 GitHub！")
+                                        st.success("✅ 成功同步至 GitHub！畫面即將重新載入...")
+                                        time.sleep(1.5)
+                                        st.rerun()
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
@@ -356,13 +364,11 @@ with tab_status:
         
         if not is_selected:
             if has_notice:
-                # NOTICE 的機台強制顯示為醒目紅色
                 dynamic_custom_css_t3 += f"""
                 div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }}
                 div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}
                 """
             elif state == "fail":
-                # FAIL 的機台顯示為黃色
                 dynamic_custom_css_t3 += f"""
                 div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
                 div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
@@ -461,6 +467,10 @@ with tab_status:
 
                                         df_upload_map = df_map.copy()
                                         df_upload_map.rename(columns={"TS2#": "NO."}, inplace=True)
+                                        
+                                        # ★ 關鍵修正：同步儲存檔案至本機環境
+                                        df_upload_map.to_excel("TS2_mapping.xlsx", index=False)
+                                        
                                         out_map = io.BytesIO()
                                         with pd.ExcelWriter(out_map, engine='openpyxl') as writer: df_upload_map.to_excel(writer, index=False)
                                         contents_map = repo.get_contents("TS2_mapping.xlsx")
@@ -476,13 +486,19 @@ with tab_status:
                                             new_row = pd.DataFrame([{"BUILD": "TS2", "NO.": str(ts2_id), "NOTE": new_note.strip() or "無資料", "NOTICE": new_notice_str}])
                                             df_note = pd.concat([df_note, new_row], ignore_index=True)
                                             
+                                        # ★ 關鍵修正：同步儲存檔案至本機環境
+                                        df_note.to_excel("TS2_note.xlsx", index=False)
+                                        
                                         out_note = io.BytesIO()
                                         with pd.ExcelWriter(out_note, engine='openpyxl') as writer: df_note.to_excel(writer, index=False)
                                         contents_note = repo.get_contents("TS2_note.xlsx")
                                         repo.update_file(contents_note.path, f"Update TS2#{ts2_id} Note via Tab3", out_note.getvalue(), contents_note.sha)
 
                                         st.cache_data.clear()
-                                        st.success("✅ 成功同步 Mapping 與 Note 資料至 GitHub！")
+                                        
+                                        st.success("✅ 成功同步 Mapping 與 Note 資料至 GitHub！畫面即將重新載入...")
+                                        time.sleep(1.5)
+                                        st.rerun()
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
