@@ -42,36 +42,22 @@ def load_rca_data():
 
 @st.cache_data(ttl=60)
 def load_mapping_data():
-    # 改回原來的檔名 TS2_mapping.xlsx
     df = pd.read_excel("TS2_mapping.xlsx", dtype=str)
-    
-    # 建立強健的「欄位名稱自動校正」機制
     rename_dict = {}
     for col in df.columns:
         col_upper = str(col).upper()
-        if "NO." in col_upper or "TS2#" in col_upper:
-            rename_dict[col] = "NO."
-        elif "CSM BASE" in col_upper or "CSM_BASE" in col_upper:
-            rename_dict[col] = "CSM BASE"
-        elif "CSM TRAY" in col_upper or "CSM_TRAY" in col_upper:
-            rename_dict[col] = "CSM TRAY"
-        elif "FULL SYS" in col_upper or "FULL_SYS" in col_upper:
-            rename_dict[col] = "FULL SYS"
-        elif "JTAG" in col_upper:
-            rename_dict[col] = "JTAG"
-        elif "AOT" in col_upper:
-            rename_dict[col] = "AOT"
-        elif "FT" in col_upper:
-            rename_dict[col] = "FT"
-        elif "STATUS" in col_upper:
-            rename_dict[col] = "STATUS"
-        elif "OWNER" in col_upper:
-            rename_dict[col] = "OWNER"
-        elif "FAILURE BIN" in col_upper or "FAIL BIN" in col_upper or "NOTE" in col_upper:
-            rename_dict[col] = "Failure BIN"
+        if "NO." in col_upper or "TS2#" in col_upper: rename_dict[col] = "NO."
+        elif "CSM BASE" in col_upper or "CSM_BASE" in col_upper: rename_dict[col] = "CSM BASE"
+        elif "CSM TRAY" in col_upper or "CSM_TRAY" in col_upper: rename_dict[col] = "CSM TRAY"
+        elif "FULL SYS" in col_upper or "FULL_SYS" in col_upper: rename_dict[col] = "FULL SYS"
+        elif "JTAG" in col_upper: rename_dict[col] = "JTAG"
+        elif "AOT" in col_upper: rename_dict[col] = "AOT"
+        elif "FT" in col_upper: rename_dict[col] = "FT"
+        elif "STATUS" in col_upper: rename_dict[col] = "STATUS"
+        elif "OWNER" in col_upper: rename_dict[col] = "OWNER"
+        elif "FAILURE BIN" in col_upper or "FAIL BIN" in col_upper or "NOTE" in col_upper: rename_dict[col] = "Failure BIN"
             
     df.rename(columns=rename_dict, inplace=True)
-    
     if 'NO.' not in df.columns:
         st.error("Excel 中找不到包含 'NO.' 的欄位，請檢查檔案標題列是否有誤。")
         st.stop()
@@ -79,23 +65,27 @@ def load_mapping_data():
     df['NO.'] = df['NO.'].ffill()
     df = df.dropna(subset=['NO.'])
     df = df.groupby('NO.', as_index=False).first()
-    
     df["NO."] = df["NO."].astype(str).str.replace(r'\.0$', '', regex=True)
     df.rename(columns={"NO.": "TS2#"}, inplace=True) 
     df.fillna("無資料", inplace=True)
     return df
 
-try:
-    df_rca = load_rca_data()
-except FileNotFoundError:
-    st.error("找不到 RCA.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
-    st.stop()
+@st.cache_data(ttl=60)
+def load_note_data():
+    df = pd.read_excel("TS2_note.xlsx", dtype=str)
+    if 'NO.' in df.columns:
+        df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
+    df.fillna("無資料", inplace=True)
+    return df
 
-try:
-    df_map = load_mapping_data()
-except FileNotFoundError:
-    st.error("找不到 TS2_mapping.xlsx 檔案！請確認它是否放在跟 app.py 同一個資料夾內。")
-    st.stop()
+try: df_rca = load_rca_data()
+except FileNotFoundError: st.error("找不到 RCA.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
+
+try: df_map = load_mapping_data()
+except FileNotFoundError: st.error("找不到 TS2_mapping.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
+
+try: df_note = load_note_data()
+except FileNotFoundError: st.error("找不到 TS2_note.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
 
 station_opts = ["無資料", "PASS", "FAIL"]
 def get_station_idx(val):
@@ -186,16 +176,14 @@ with tab_map:
         cnt = 0
         for col in ['CSM BASE', 'CSM TRAY', 'FULL SYS']:
             val = row.get(col, "無資料")
-            if pd.notna(val) and str(val).strip() not in ["", "無資料", "nan", "NaN"]:
-                cnt += 1
+            if pd.notna(val) and str(val).strip() not in ["", "無資料", "nan", "NaN"]: cnt += 1
         return cnt
 
     ts2_sn_counts = {}
     for idx, row in df_map.iterrows():
         ts2_id = str(row['TS2#']).strip()
         cnt = get_sn_count(row)
-        if ts2_id not in ts2_sn_counts or cnt > ts2_sn_counts[ts2_id]:
-            ts2_sn_counts[ts2_id] = cnt
+        if ts2_id not in ts2_sn_counts or cnt > ts2_sn_counts[ts2_id]: ts2_sn_counts[ts2_id] = cnt
 
     current_search_col = st.session_state.get("map_col", "TS2#")
     current_search_val = st.session_state.get("map_search_input", "").strip()
@@ -203,8 +191,7 @@ with tab_map:
     
     if current_search_val:
         query_val = current_search_val
-        if current_search_col == "TS2#":
-            query_val = query_val.upper().replace("TS2#", "").replace("TS#", "").strip()
+        if current_search_col == "TS2#": query_val = query_val.upper().replace("TS2#", "").replace("TS#", "").strip()
         temp_df = df_map[df_map[current_search_col] == query_val]
         active_ts2_numbers = set(temp_df["TS2#"].dropna().astype(str).tolist())
 
@@ -221,16 +208,11 @@ with tab_map:
         
         if not is_selected and c in [1, 2]:
             dynamic_yellow_css_t2 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{
-                background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important;
-            }}
-            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{
-                background-color: #e0a800 !important; border-color: #e0a800 !important;
-            }}
+            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
+            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
             """
     
-    if dynamic_yellow_css_t2:
-        st.markdown(f"<style>{dynamic_yellow_css_t2}</style>", unsafe_allow_html=True)
+    if dynamic_yellow_css_t2: st.markdown(f"<style>{dynamic_yellow_css_t2}</style>", unsafe_allow_html=True)
 
     panel_title_t2 = f"🎛️ TS2# 快速點選面板 (綠色: 完整({full_cnt}) / 黃色: 缺件({partial_cnt}) / 灰色: 無資料({empty_cnt}) / 藍色: 選取)"
     
@@ -313,12 +295,9 @@ with tab_map:
                                         df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
                                         output = io.BytesIO()
                                         with pd.ExcelWriter(output, engine='openpyxl') as writer: df_upload.to_excel(writer, index=False)
-                                        excel_data = output.getvalue()
-                                        g = Github(st.secrets["GITHUB_TOKEN"])
-                                        repo = g.get_repo(st.secrets["GITHUB_REPO"])
-                                        # 恢復為 TS2_mapping.xlsx
+                                        repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
                                         contents = repo.get_contents("TS2_mapping.xlsx")
-                                        repo.update_file(contents.path, f"Update TS2#{ts2_id} via Streamlit", excel_data, contents.sha)
+                                        repo.update_file(contents.path, f"Update TS2#{ts2_id} via Streamlit", output.getvalue(), contents.sha)
                                         st.cache_data.clear()
                                         st.success("✅ 成功同步至 GitHub！")
                                     except Exception as e:
@@ -339,12 +318,9 @@ with tab_status:
 
     def get_t3_state(row):
         ft_val = str(row.get('FT', '無資料')).strip().upper()
-        if ft_val == "PASS":
-            return "pass"
-        elif ft_val == "FAIL":
-            return "fail"
-        else:
-            return "empty"
+        if ft_val == "PASS": return "pass"
+        elif ft_val == "FAIL": return "fail"
+        else: return "empty"
 
     ts2_status_states = {}
     for idx, row in df_map.iterrows():
@@ -369,16 +345,11 @@ with tab_status:
         
         if not is_selected and state == "fail":
             dynamic_yellow_css_t3 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{
-                background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important;
-            }}
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{
-                background-color: #e0a800 !important; border-color: #e0a800 !important;
-            }}
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
             """
             
-    if dynamic_yellow_css_t3:
-        st.markdown(f"<style>{dynamic_yellow_css_t3}</style>", unsafe_allow_html=True)
+    if dynamic_yellow_css_t3: st.markdown(f"<style>{dynamic_yellow_css_t3}</style>", unsafe_allow_html=True)
 
     panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: FT PASS({t3_pass_cnt}) / 黃色: FT FAIL({t3_fail_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
     
@@ -400,6 +371,11 @@ with tab_status:
         if not match_df.empty:
             for idx, row in match_df.iterrows():
                 ts2_id = row['TS2#']
+                
+                # --- 取得 TS2_note 的資料 ---
+                note_row = df_note[df_note['NO.'] == str(ts2_id)]
+                val_note = note_row['NOTE'].values[0] if not note_row.empty else "無資料"
+                val_note_str = "" if pd.isna(val_note) or val_note == "無資料" else str(val_note)
                 
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
@@ -439,13 +415,20 @@ with tab_status:
                         val_fail_bin = val_fail_bin if pd.notna(val_fail_bin) and val_fail_bin != "無資料" else ""
                         new_fail_bin = st.text_input("Failure BIN", value=val_fail_bin, key=f"t3_edit_fail_bin_{ts2_id}")
 
+                        # ★ 新增：NOTE 編輯區塊 (支援多行輸入)
+                        st.markdown("#### 📝 備註 (儲存於 TS2_note.xlsx)")
+                        new_note = st.text_area("詳細備註內容", value=val_note_str, height=100, label_visibility="collapsed", key=f"t3_edit_note_{ts2_id}")
+
                         st.write("")
                         if st.button("💾 儲存修改並同步至 GitHub", key=f"t3_save_btn_{ts2_id}", type="primary", use_container_width=True):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
                                 st.error("❌ 尚未設定 GitHub Token 或 Repo！")
                             else:
-                                with st.spinner("🔄 正在更新並上傳..."):
+                                with st.spinner("🔄 正在更新並上傳 Mapping 與 Note 檔案..."):
                                     try:
+                                        repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+                                        
+                                        # 1. 處理 Mapping 檔案
                                         idx_update = df_map[df_map['TS2#'] == ts2_id].index
                                         df_map.loc[idx_update, 'JTAG'] = new_jtag
                                         df_map.loc[idx_update, 'AOT'] = new_aot
@@ -454,18 +437,28 @@ with tab_status:
                                         df_map.loc[idx_update, 'OWNER'] = new_owner.strip() or "無資料"
                                         df_map.loc[idx_update, 'Failure BIN'] = new_fail_bin.strip() or "無資料"
 
-                                        df_upload = df_map.copy()
-                                        df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
-                                        output = io.BytesIO()
-                                        with pd.ExcelWriter(output, engine='openpyxl') as writer: df_upload.to_excel(writer, index=False)
-                                        excel_data = output.getvalue()
-                                        g = Github(st.secrets["GITHUB_TOKEN"])
-                                        repo = g.get_repo(st.secrets["GITHUB_REPO"])
-                                        # 恢復為 TS2_mapping.xlsx
-                                        contents = repo.get_contents("TS2_mapping.xlsx")
-                                        repo.update_file(contents.path, f"Update TS2#{ts2_id} via Tab3", excel_data, contents.sha)
+                                        df_upload_map = df_map.copy()
+                                        df_upload_map.rename(columns={"TS2#": "NO."}, inplace=True)
+                                        out_map = io.BytesIO()
+                                        with pd.ExcelWriter(out_map, engine='openpyxl') as writer: df_upload_map.to_excel(writer, index=False)
+                                        contents_map = repo.get_contents("TS2_mapping.xlsx")
+                                        repo.update_file(contents_map.path, f"Update TS2#{ts2_id} Mapping via Tab3", out_map.getvalue(), contents_map.sha)
+
+                                        # 2. 處理 Note 檔案
+                                        idx_note = df_note[df_note['NO.'] == str(ts2_id)].index
+                                        if not idx_note.empty:
+                                            df_note.loc[idx_note, 'NOTE'] = new_note.strip() or "無資料"
+                                        else:
+                                            new_row = pd.DataFrame([{"BUILD": "TS2", "NO.": str(ts2_id), "NOTE": new_note.strip() or "無資料"}])
+                                            df_note = pd.concat([df_note, new_row], ignore_index=True)
+                                            
+                                        out_note = io.BytesIO()
+                                        with pd.ExcelWriter(out_note, engine='openpyxl') as writer: df_note.to_excel(writer, index=False)
+                                        contents_note = repo.get_contents("TS2_note.xlsx")
+                                        repo.update_file(contents_note.path, f"Update TS2#{ts2_id} Note via Tab3", out_note.getvalue(), contents_note.sha)
+
                                         st.cache_data.clear()
-                                        st.success("✅ 成功同步至 GitHub！")
+                                        st.success("✅ 成功同步 Mapping 與 Note 資料至 GitHub！")
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
@@ -482,5 +475,8 @@ with tab_status:
                             f"**OWNER**: `{row.get('OWNER', '無資料')}`  \n"
                             f"**Failure BIN**: `{row.get('Failure BIN', '無資料')}`"
                         )
+                        
+                        # ★ 新增：顯示獨立的 NOTE 區塊
+                        st.markdown(f"**📝 詳細備註** (來自 TS2_note.xlsx):  \n> {val_note_str if val_note_str else '無資料'}")
         else:
             st.error(f"⚠️ 找不到該筆資料。")
