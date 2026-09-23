@@ -16,16 +16,27 @@ button[kind="tertiary"] { background-color: #007bff !important; border-color: #0
 button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
 button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
-/* CSS Grid 強制 10 欄網格佈局 */
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
+/* ★ 修正 CSS 衝突：只針對包含 .t2-panel 或 .t3-panel 的折疊面板套用 10 欄網格，放過其他正常的搜尋框 ★ */
+div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"],
+div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] {
     display: grid !important; grid-template-columns: repeat(10, 1fr) !important; gap: 4px !important; width: 100% !important; padding-bottom: 3px !important;
 }
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] { width: 100% !important; min-width: 0 !important; padding: 0 !important; }
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button {
+div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div[data-testid="column"] { 
+    width: 100% !important; min-width: 0 !important; padding: 0 !important; 
+}
+div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button,
+div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button {
     width: 200% !important; aspect-ratio: 1 / 1 !important; border-radius: 6px !important; padding: 0 !important; margin: 0 !important; min-height: 0 !important; height: auto !important; display: flex !important; align-items: center !important; justify-content: center !important;
 }
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button > div { display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; }
-div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] button p { font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; }
+div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button > div,
+div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button > div { 
+    display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; 
+}
+div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button p,
+div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button p { 
+    font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; 
+}
 div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -91,7 +102,7 @@ except FileNotFoundError: st.error("找不到 TS2_mapping.xlsx 檔案！請確�
 try: df_note = load_note_data()
 except FileNotFoundError: st.error("找不到 TS2_note.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
 
-# ★ 關鍵修正：嚴格只取 Mapping 檔內的編號，忽略 Note 檔裡的幽靈資料 ★
+# ★ 嚴格只取 Mapping 檔內的編號 ★
 valid_ts2_set = set()
 for v in df_map["TS2#"].dropna().astype(str):
     if v.strip() and v.strip() != "無資料" and v.strip().lower() != "nan":
@@ -295,7 +306,7 @@ with tab_map:
                     
                 cols[idx].button(str(ts2_val), key=f"btn_t2_{ts2_val}", on_click=set_ts2_search, args=(ts2_val,), type=btn_type, use_container_width=True)
 
-    with st.container(border=True):
+    with st.expander("🔍 條件反查 (使用 TS2# 或 SN 搜尋)", expanded=False):
         st.markdown("輸入 **TS2# NO.** (例如: 2), 或是輸入 **CSM BASE, CSM TRAY, FULL SYS** 任意一組 SN，即可互相反查。")
         map_cols = ["TS2#", "CSM BASE", "CSM TRAY", "FULL SYS"]
         col1, col2 = st.columns([1, 2])
