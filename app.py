@@ -170,7 +170,65 @@ with tab_rca:
 # 分頁 2: Mapping查詢
 # ==========================================
 with tab_map:
-    st.header("🔄 Mapping查詢")
+    # ★ 新增：將標題與上傳檔案區塊並排 ★
+    col_title, col_upload = st.columns([0.6, 0.4])
+    with col_title:
+        st.header("🔄 Mapping查詢")
+    with col_upload:
+        with st.expander("📤 上傳更新 TS2_mapping", expanded=False):
+            uploaded_file = st.file_uploader("選擇 Excel 檔案 (.xlsx)", type=["xlsx"])
+            if uploaded_file:
+                try:
+                    df_test = pd.read_excel(uploaded_file, dtype=str)
+                    
+                    # 模擬欄位名稱校正
+                    rename_test = {}
+                    for col in df_test.columns:
+                        c_up = str(col).upper()
+                        if "NO." in c_up or "TS2#" in c_up: rename_test[col] = "NO."
+                        elif "CSM BASE" in c_up or "CSM_BASE" in c_up: rename_test[col] = "CSM BASE"
+                        elif "CSM TRAY" in c_up or "CSM_TRAY" in c_up: rename_test[col] = "CSM TRAY"
+                        elif "FULL SYS" in c_up or "FULL_SYS" in c_up: rename_test[col] = "FULL SYS"
+                    df_test.rename(columns=rename_test, inplace=True)
+                    
+                    # 1. 嚴格檢查：必須有 NO. 欄位
+                    if 'NO.' not in df_test.columns:
+                        st.error("❌ 嚴重錯誤：找不到 'NO.' 或 'TS2#' 欄位，無法解析此檔案。")
+                    else:
+                        # 2. 輔助檢查：重要 SN 欄位是否齊全
+                        missing_sn = []
+                        for req_col in ['CSM BASE', 'CSM TRAY', 'FULL SYS']:
+                            if req_col not in df_test.columns: missing_sn.append(req_col)
+                        
+                        st.success(f"✅ 驗證通過！共讀取到 {len(df_test)} 筆資料。")
+                        if missing_sn:
+                            st.warning(f"⚠️ 警告：檔案缺少以下欄位 ({', '.join(missing_sn)})，仍可強制上傳，但可能會顯示無資料。")
+                            
+                        # 按鈕觸發上傳
+                        if st.button("🚀 確認上傳並覆蓋至 GitHub", use_container_width=True, type="primary"):
+                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                            else:
+                                with st.spinner("🔄 上傳中..."):
+                                    uploaded_file.seek(0)
+                                    excel_bytes = uploaded_file.read()
+                                    
+                                    # 寫入本機
+                                    with open("TS2_mapping.xlsx", "wb") as f:
+                                        f.write(excel_bytes)
+                                    
+                                    # 寫入 GitHub
+                                    repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+                                    contents = repo.get_contents("TS2_mapping.xlsx")
+                                    repo.update_file(contents.path, "Update TS2_mapping.xlsx via Streamlit Upload", excel_bytes, contents.sha)
+                                    
+                                    st.cache_data.clear()
+                                    st.success("✅ 檔案已成功更新！畫面即將重新載入...")
+                                    time.sleep(1.5)
+                                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 解析檔案失敗：{e}")
+
     def set_ts2_search(num_str):
         st.session_state["map_col"] = "TS2#"
         st.session_state["map_search_input"] = num_str
@@ -296,8 +354,6 @@ with tab_map:
 
                                         df_upload = df_map.copy()
                                         df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
-                                        
-                                        # ★ 關鍵修正：同步儲存檔案至本機環境
                                         df_upload.to_excel("TS2_mapping.xlsx", index=False)
                                         
                                         output = io.BytesIO()
@@ -305,8 +361,8 @@ with tab_map:
                                         repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
                                         contents = repo.get_contents("TS2_mapping.xlsx")
                                         repo.update_file(contents.path, f"Update TS2#{ts2_id} via Streamlit", output.getvalue(), contents.sha)
-                                        
                                         st.cache_data.clear()
+                                        
                                         st.success("✅ 成功同步至 GitHub！畫面即將重新載入...")
                                         time.sleep(1.5)
                                         st.rerun()
@@ -467,8 +523,6 @@ with tab_status:
 
                                         df_upload_map = df_map.copy()
                                         df_upload_map.rename(columns={"TS2#": "NO."}, inplace=True)
-                                        
-                                        # ★ 關鍵修正：同步儲存檔案至本機環境
                                         df_upload_map.to_excel("TS2_mapping.xlsx", index=False)
                                         
                                         out_map = io.BytesIO()
@@ -486,7 +540,6 @@ with tab_status:
                                             new_row = pd.DataFrame([{"BUILD": "TS2", "NO.": str(ts2_id), "NOTE": new_note.strip() or "無資料", "NOTICE": new_notice_str}])
                                             df_note = pd.concat([df_note, new_row], ignore_index=True)
                                             
-                                        # ★ 關鍵修正：同步儲存檔案至本機環境
                                         df_note.to_excel("TS2_note.xlsx", index=False)
                                         
                                         out_note = io.BytesIO()
@@ -495,7 +548,6 @@ with tab_status:
                                         repo.update_file(contents_note.path, f"Update TS2#{ts2_id} Note via Tab3", out_note.getvalue(), contents_note.sha)
 
                                         st.cache_data.clear()
-                                        
                                         st.success("✅ 成功同步 Mapping 與 Note 資料至 GitHub！畫面即將重新載入...")
                                         time.sleep(1.5)
                                         st.rerun()
