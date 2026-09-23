@@ -12,11 +12,9 @@ st.markdown("""
 <style>
 button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
 button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
-button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
-button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
 button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
-/* ★ 修正 CSS 衝突：只針對包含 .t2-panel 或 .t3-panel 的折疊面板套用 10 欄網格，放過其他正常的搜尋框 ★ */
+/* ★ 修正 CSS 衝突：只針對包含 .t2-panel 或 .t3-panel 的折疊面板套用 10 欄網格 ★ */
 div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"],
 div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] {
     display: grid !important; grid-template-columns: repeat(10, 1fr) !important; gap: 4px !important; width: 100% !important; padding-bottom: 3px !important;
@@ -27,7 +25,7 @@ div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizonta
 }
 div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button,
 div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button {
-    width: 200% !important; aspect-ratio: 1 / 1 !important; border-radius: 6px !important; padding: 0 !important; margin: 0 !important; min-height: 0 !important; height: auto !important; display: flex !important; align-items: center !important; justify-content: center !important;
+    width: 200% !important; aspect-ratio: 1 / 1 !important; border-radius: 6px !important; padding: 0 !important; margin: 0 !important; min-height: 0 !important; height: auto !important; display: flex !important; align-items: center !important; justify-content: center !important; transition: all 0.2s ease-in-out !important;
 }
 div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button > div,
 div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button > div { 
@@ -280,15 +278,28 @@ with tab_map:
         elif c in [1, 2]: partial_cnt += 1
         else: empty_cnt += 1
         
-        if not is_selected and c in [1, 2]:
+        # 套用基礎顏色 (黃色缺件)
+        if c in [1, 2]:
             dynamic_yellow_css_t2 += f"""
             div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
             div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
             """
+            
+        # ★ 新增：選取狀態的放大浮出效果與藍色粗外框 ★
+        if is_selected:
+            dynamic_yellow_css_t2 += f"""
+            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{
+                border: 4px solid #0056b3 !important; 
+                box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important;
+                transform: scale(1.15) !important;
+                position: relative !important;
+                z-index: 99 !important;
+            }}
+            """
     
     if dynamic_yellow_css_t2: st.markdown(f"<style>{dynamic_yellow_css_t2}</style>", unsafe_allow_html=True)
 
-    panel_title_t2 = f"🎛️ TS2# 快速點選面板 (綠色: 完整({full_cnt}) / 黃色: 缺件({partial_cnt}) / 灰色: 無資料({empty_cnt}) / 藍色: 選取)"
+    panel_title_t2 = f"🎛️ TS2# 快速點選面板 (綠色: 完整({full_cnt}) / 黃色: 缺件({partial_cnt}) / 灰色: 無資料({empty_cnt}) / 框線放大: 目前選取)"
     
     with st.expander(panel_title_t2, expanded=True):
         st.markdown('<div class="t2-panel" style="display:none;"></div>', unsafe_allow_html=True)
@@ -298,12 +309,8 @@ with tab_map:
             cols = st.columns(len(valid_ts2_list))
             for idx, ts2_val in enumerate(valid_ts2_list):
                 c = ts2_sn_counts.get(ts2_val, 0)
-                is_selected = (ts2_val in active_ts2_numbers)
-                
-                if is_selected: btn_type = "tertiary"
-                elif c == 3: btn_type = "primary"
-                else: btn_type = "secondary"
-                    
+                # 不論是否選取，都使用原始的 primary/secondary 顏色分類
+                btn_type = "primary" if c == 3 else "secondary"
                 cols[idx].button(str(ts2_val), key=f"btn_t2_{ts2_val}", on_click=set_ts2_search, args=(ts2_val,), type=btn_type, use_container_width=True)
 
     with st.expander("🔍 條件反查 (使用 TS2# 或 SN 搜尋)", expanded=False):
@@ -475,21 +482,33 @@ with tab_status:
         elif state == "fail": t3_fail_cnt += 1
         else: t3_empty_cnt += 1
         
-        if not is_selected:
-            if has_notice:
-                dynamic_custom_css_t3 += f"""
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }}
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}
-                """
-            elif state == "fail":
-                dynamic_custom_css_t3 += f"""
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
-                """
+        # 套用基礎顏色 (紅色警告 或 黃色FAIL)
+        if has_notice:
+            dynamic_custom_css_t3 += f"""
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }}
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}
+            """
+        elif state == "fail":
+            dynamic_custom_css_t3 += f"""
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
+            """
+            
+        # ★ 新增：選取狀態的放大浮出效果與藍色粗外框 ★
+        if is_selected:
+            dynamic_custom_css_t3 += f"""
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{
+                border: 4px solid #0056b3 !important; 
+                box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important;
+                transform: scale(1.15) !important;
+                position: relative !important;
+                z-index: 99 !important;
+            }}
+            """
             
     if dynamic_custom_css_t3: st.markdown(f"<style>{dynamic_custom_css_t3}</style>", unsafe_allow_html=True)
 
-    panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: PASS({t3_pass_cnt}) / 黃色: FAIL({t3_fail_cnt}) / 紅色: NOTICE({t3_notice_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 藍色: 選取)"
+    panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: PASS({t3_pass_cnt}) / 黃色: FAIL({t3_fail_cnt}) / 紅色: NOTICE({t3_notice_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 框線放大: 目前選取)"
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
@@ -499,12 +518,8 @@ with tab_status:
             cols = st.columns(len(valid_ts2_list))
             for idx, ts2_val in enumerate(valid_ts2_list):
                 state = ts2_status_states.get(ts2_val, "empty")
-                is_selected = (ts2_val == active_status_ts2)
-                
-                if is_selected: btn_type = "tertiary"
-                elif state == "pass": btn_type = "primary"
-                else: btn_type = "secondary"
-                    
+                # 不論是否選取，都使用原始的 primary/secondary 顏色分類
+                btn_type = "primary" if state == "pass" else "secondary"
                 cols[idx].button(str(ts2_val), key=f"btn_t3_{ts2_val}", on_click=set_ts2_status_search, args=(ts2_val,), type=btn_type, use_container_width=True)
 
     if active_status_ts2:
@@ -560,7 +575,7 @@ with tab_status:
                         val_fail_bin = val_fail_bin if pd.notna(val_fail_bin) and val_fail_bin != "無資料" else ""
                         new_fail_bin = st.text_input("Failure BIN", value=val_fail_bin, key=f"t3_edit_fail_bin_{ts2_id}")
 
-                        st.markdown("#### 📝 備註與標註 (儲存於 TS2_note.xlsx)")
+                        st.markdown("#### 📝 備註與標註")
                         new_notice = st.checkbox("🚨 設定為特別標註 (紅色按鈕)", value=(val_notice == '1'), key=f"t3_edit_notice_{ts2_id}")
                         new_note = st.text_area("詳細備註內容", value=val_note_str, height=100, label_visibility="collapsed", key=f"t3_edit_note_{ts2_id}")
 
@@ -626,6 +641,12 @@ with tab_status:
                             f"**Failure BIN**: `{row.get('Failure BIN', '無資料')}`"
                         )
                         
-                        st.markdown(f"**📝 詳細備註** (來自 TS2_note.xlsx):  \n> {val_note_str if val_note_str else '無資料'}")
+                        st.markdown("**📝 詳細備註:**")
+                        display_note = val_note_str if val_note_str else '無資料'
+                        display_note = display_note.replace('\n', '  \n')
+                        if val_notice == '1':
+                            st.error(f"**{display_note}**")
+                        else:
+                            st.info(f"**{display_note}**")
         else:
             st.error(f"⚠️ 找不到該筆資料。")
