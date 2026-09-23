@@ -170,18 +170,22 @@ with tab_rca:
 # 分頁 2: Mapping查詢
 # ==========================================
 with tab_map:
-    # ★ 新增：將標題與上傳檔案區塊並排 ★
     col_title, col_upload = st.columns([0.6, 0.4])
     with col_title:
         st.header("🔄 Mapping查詢")
     with col_upload:
-        with st.expander("📤 上傳更新 TS2_mapping", expanded=False):
-            uploaded_file = st.file_uploader("選擇 Excel 檔案 (.xlsx)", type=["xlsx"])
+        with st.expander("📤 上傳 / 下載 TS2_mapping", expanded=False):
+            try:
+                with open("TS2_mapping.xlsx", "rb") as f:
+                    st.download_button(label="📥 下載目前 Mapping 檔", data=f, file_name="TS2_mapping.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            except FileNotFoundError:
+                pass
+                
+            st.divider()
+            uploaded_file = st.file_uploader("選擇 Mapping 檔案 (.xlsx)", type=["xlsx"])
             if uploaded_file:
                 try:
                     df_test = pd.read_excel(uploaded_file, dtype=str)
-                    
-                    # 模擬欄位名稱校正
                     rename_test = {}
                     for col in df_test.columns:
                         c_up = str(col).upper()
@@ -191,20 +195,13 @@ with tab_map:
                         elif "FULL SYS" in c_up or "FULL_SYS" in c_up: rename_test[col] = "FULL SYS"
                     df_test.rename(columns=rename_test, inplace=True)
                     
-                    # 1. 嚴格檢查：必須有 NO. 欄位
                     if 'NO.' not in df_test.columns:
                         st.error("❌ 嚴重錯誤：找不到 'NO.' 或 'TS2#' 欄位，無法解析此檔案。")
                     else:
-                        # 2. 輔助檢查：重要 SN 欄位是否齊全
-                        missing_sn = []
-                        for req_col in ['CSM BASE', 'CSM TRAY', 'FULL SYS']:
-                            if req_col not in df_test.columns: missing_sn.append(req_col)
-                        
+                        missing_sn = [req_col for req_col in ['CSM BASE', 'CSM TRAY', 'FULL SYS'] if req_col not in df_test.columns]
                         st.success(f"✅ 驗證通過！共讀取到 {len(df_test)} 筆資料。")
-                        if missing_sn:
-                            st.warning(f"⚠️ 警告：檔案缺少以下欄位 ({', '.join(missing_sn)})，仍可強制上傳，但可能會顯示無資料。")
+                        if missing_sn: st.warning(f"⚠️ 警告：檔案缺少以下欄位 ({', '.join(missing_sn)})，仍可強制上傳。")
                             
-                        # 按鈕觸發上傳
                         if st.button("🚀 確認上傳並覆蓋至 GitHub", use_container_width=True, type="primary"):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
                                 st.error("❌ 尚未設定 GitHub Token 或 Repo！")
@@ -212,16 +209,10 @@ with tab_map:
                                 with st.spinner("🔄 上傳中..."):
                                     uploaded_file.seek(0)
                                     excel_bytes = uploaded_file.read()
-                                    
-                                    # 寫入本機
-                                    with open("TS2_mapping.xlsx", "wb") as f:
-                                        f.write(excel_bytes)
-                                    
-                                    # 寫入 GitHub
+                                    with open("TS2_mapping.xlsx", "wb") as f: f.write(excel_bytes)
                                     repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
                                     contents = repo.get_contents("TS2_mapping.xlsx")
                                     repo.update_file(contents.path, "Update TS2_mapping.xlsx via Streamlit Upload", excel_bytes, contents.sha)
-                                    
                                     st.cache_data.clear()
                                     st.success("✅ 檔案已成功更新！畫面即將重新載入...")
                                     time.sleep(1.5)
@@ -378,7 +369,49 @@ with tab_map:
 # 分頁 3: TS2 STATUS
 # ==========================================
 with tab_status:
-    st.header("📊 TS2 STATUS")
+    # ★ 新增：將標題與上傳/下載 TS2_note 檔案區塊並排 ★
+    col_title_t3, col_upload_t3 = st.columns([0.6, 0.4])
+    with col_title_t3:
+        st.header("📊 TS2 STATUS")
+    with col_upload_t3:
+        with st.expander("📤 上傳 / 下載 TS2_note", expanded=False):
+            try:
+                with open("TS2_note.xlsx", "rb") as f:
+                    st.download_button(label="📥 下載目前 Note 檔", data=f, file_name="TS2_note.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            except FileNotFoundError:
+                pass
+                
+            st.divider()
+            uploaded_note = st.file_uploader("選擇 Note 檔案 (.xlsx)", type=["xlsx"], key="upload_note")
+            if uploaded_note:
+                try:
+                    df_note_test = pd.read_excel(uploaded_note, dtype=str)
+                    
+                    if 'NO.' not in df_note_test.columns:
+                        st.error("❌ 嚴重錯誤：找不到 'NO.' 欄位，無法解析此檔案。")
+                    else:
+                        missing_note_cols = [c for c in ['NOTE', 'NOTICE'] if c not in df_note_test.columns]
+                        st.success(f"✅ 驗證通過！共讀取到 {len(df_note_test)} 筆備註資料。")
+                        if missing_note_cols: st.warning(f"⚠️ 警告：檔案缺少以下欄位 ({', '.join(missing_note_cols)})，系統將在寫入時自動補齊。")
+                            
+                        if st.button("🚀 確認上傳並覆蓋至 GitHub", key="btn_upload_note", use_container_width=True, type="primary"):
+                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                            else:
+                                with st.spinner("🔄 上傳中..."):
+                                    uploaded_note.seek(0)
+                                    excel_bytes = uploaded_note.read()
+                                    with open("TS2_note.xlsx", "wb") as f: f.write(excel_bytes)
+                                    repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+                                    contents = repo.get_contents("TS2_note.xlsx")
+                                    repo.update_file(contents.path, "Update TS2_note.xlsx via Streamlit Upload", excel_bytes, contents.sha)
+                                    st.cache_data.clear()
+                                    st.success("✅ 檔案已成功更新！畫面即將重新載入...")
+                                    time.sleep(1.5)
+                                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 解析檔案失敗：{e}")
+
     def set_ts2_status_search(num_str):
         st.session_state["status_active_ts2"] = num_str
 
@@ -524,7 +557,6 @@ with tab_status:
                                         df_upload_map = df_map.copy()
                                         df_upload_map.rename(columns={"TS2#": "NO."}, inplace=True)
                                         df_upload_map.to_excel("TS2_mapping.xlsx", index=False)
-                                        
                                         out_map = io.BytesIO()
                                         with pd.ExcelWriter(out_map, engine='openpyxl') as writer: df_upload_map.to_excel(writer, index=False)
                                         contents_map = repo.get_contents("TS2_mapping.xlsx")
@@ -541,7 +573,6 @@ with tab_status:
                                             df_note = pd.concat([df_note, new_row], ignore_index=True)
                                             
                                         df_note.to_excel("TS2_note.xlsx", index=False)
-                                        
                                         out_note = io.BytesIO()
                                         with pd.ExcelWriter(out_note, engine='openpyxl') as writer: df_note.to_excel(writer, index=False)
                                         contents_note = repo.get_contents("TS2_note.xlsx")
