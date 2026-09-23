@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import time
+import re
 from github import Github
 
 st.set_page_config(page_title="卡美問題與 SN 查詢", layout="centered")
@@ -89,6 +90,16 @@ except FileNotFoundError: st.error("找不到 TS2_mapping.xlsx 檔案！請確�
 
 try: df_note = load_note_data()
 except FileNotFoundError: st.error("找不到 TS2_note.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
+
+# ★ 關鍵修正：嚴格只取 Mapping 檔內的編號，忽略 Note 檔裡的幽靈資料 ★
+valid_ts2_set = set()
+for v in df_map["TS2#"].dropna().astype(str):
+    if v.strip() and v.strip() != "無資料" and v.strip().lower() != "nan":
+        valid_ts2_set.add(v.strip())
+
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
+valid_ts2_list = sorted(list(valid_ts2_set), key=natural_sort_key)
 
 station_opts = ["無資料", "PASS", "FAIL"]
 def get_station_idx(val):
@@ -250,9 +261,9 @@ with tab_map:
     dynamic_yellow_css_t2 = ""
     full_cnt, partial_cnt, empty_cnt = 0, 0, 0
     
-    for num in range(1, 100):
-        c = ts2_sn_counts.get(str(num), 0)
-        is_selected = str(num) in active_ts2_numbers
+    for idx, ts2_val in enumerate(valid_ts2_list):
+        c = ts2_sn_counts.get(ts2_val, 0)
+        is_selected = (ts2_val in active_ts2_numbers)
         
         if c == 3: full_cnt += 1
         elif c in [1, 2]: partial_cnt += 1
@@ -260,8 +271,8 @@ with tab_map:
         
         if not is_selected and c in [1, 2]:
             dynamic_yellow_css_t2 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
-            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
+            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
+            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
             """
     
     if dynamic_yellow_css_t2: st.markdown(f"<style>{dynamic_yellow_css_t2}</style>", unsafe_allow_html=True)
@@ -270,16 +281,19 @@ with tab_map:
     
     with st.expander(panel_title_t2, expanded=True):
         st.markdown('<div class="t2-panel" style="display:none;"></div>', unsafe_allow_html=True)
-        cols = st.columns(99)
-        for num in range(1, 100):
-            c = ts2_sn_counts.get(str(num), 0)
-            is_selected = str(num) in active_ts2_numbers
-            
-            if is_selected: btn_type = "tertiary"
-            elif c == 3: btn_type = "primary"
-            else: btn_type = "secondary"
+        if len(valid_ts2_list) == 0:
+            st.info("尚無 TS2 資料")
+        else:
+            cols = st.columns(len(valid_ts2_list))
+            for idx, ts2_val in enumerate(valid_ts2_list):
+                c = ts2_sn_counts.get(ts2_val, 0)
+                is_selected = (ts2_val in active_ts2_numbers)
                 
-            cols[num-1].button(str(num), key=f"btn_t2_{num}", on_click=set_ts2_search, args=(str(num),), type=btn_type, use_container_width=True)
+                if is_selected: btn_type = "tertiary"
+                elif c == 3: btn_type = "primary"
+                else: btn_type = "secondary"
+                    
+                cols[idx].button(str(ts2_val), key=f"btn_t2_{ts2_val}", on_click=set_ts2_search, args=(ts2_val,), type=btn_type, use_container_width=True)
 
     with st.container(border=True):
         st.markdown("輸入 **TS2# NO.** (例如: 2), 或是輸入 **CSM BASE, CSM TRAY, FULL SYS** 任意一組 SN，即可互相反查。")
@@ -369,7 +383,6 @@ with tab_map:
 # 分頁 3: TS2 STATUS
 # ==========================================
 with tab_status:
-    # ★ 新增：將標題與上傳/下載 TS2_note 檔案區塊並排 ★
     col_title_t3, col_upload_t3 = st.columns([0.6, 0.4])
     with col_title_t3:
         st.header("📊 TS2 STATUS")
@@ -441,10 +454,10 @@ with tab_status:
     t3_pass_cnt, t3_fail_cnt, t3_empty_cnt, t3_notice_cnt = 0, 0, 0, 0
     active_status_ts2 = st.session_state.get("status_active_ts2", "")
 
-    for num in range(1, 100):
-        state = ts2_status_states.get(str(num), "empty")
-        is_selected = (str(num) == active_status_ts2)
-        has_notice = (ts2_notice_states.get(str(num)) == '1')
+    for idx, ts2_val in enumerate(valid_ts2_list):
+        state = ts2_status_states.get(ts2_val, "empty")
+        is_selected = (ts2_val == active_status_ts2)
+        has_notice = (ts2_notice_states.get(ts2_val) == '1')
         
         if has_notice: t3_notice_cnt += 1
         elif state == "pass": t3_pass_cnt += 1
@@ -454,13 +467,13 @@ with tab_status:
         if not is_selected:
             if has_notice:
                 dynamic_custom_css_t3 += f"""
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }}
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }}
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}
                 """
             elif state == "fail":
                 dynamic_custom_css_t3 += f"""
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
-                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({num}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
+                div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
                 """
             
     if dynamic_custom_css_t3: st.markdown(f"<style>{dynamic_custom_css_t3}</style>", unsafe_allow_html=True)
@@ -469,16 +482,19 @@ with tab_status:
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
-        cols = st.columns(99)
-        for num in range(1, 100):
-            state = ts2_status_states.get(str(num), "empty")
-            is_selected = (str(num) == active_status_ts2)
-            
-            if is_selected: btn_type = "tertiary"
-            elif state == "pass": btn_type = "primary"
-            else: btn_type = "secondary"
+        if len(valid_ts2_list) == 0:
+            st.info("尚無 TS2 資料")
+        else:
+            cols = st.columns(len(valid_ts2_list))
+            for idx, ts2_val in enumerate(valid_ts2_list):
+                state = ts2_status_states.get(ts2_val, "empty")
+                is_selected = (ts2_val == active_status_ts2)
                 
-            cols[num-1].button(str(num), key=f"btn_t3_{num}", on_click=set_ts2_status_search, args=(str(num),), type=btn_type, use_container_width=True)
+                if is_selected: btn_type = "tertiary"
+                elif state == "pass": btn_type = "primary"
+                else: btn_type = "secondary"
+                    
+                cols[idx].button(str(ts2_val), key=f"btn_t3_{ts2_val}", on_click=set_ts2_status_search, args=(ts2_val,), type=btn_type, use_container_width=True)
 
     if active_status_ts2:
         match_df = df_map[df_map['TS2#'] == active_status_ts2]
