@@ -12,6 +12,8 @@ st.markdown("""
 <style>
 button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
 button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
+button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
+button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
 button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
 /* ★ 修正 CSS 衝突：只針對包含 .t2-panel 或 .t3-panel 的折疊面板套用 10 欄網格 ★ */
@@ -91,6 +93,16 @@ def load_note_data():
     df.fillna("無資料", inplace=True)
     return df
 
+@st.cache_data(ttl=60)
+def load_handover_data():
+    df = pd.read_excel("Chameleon handover status.xlsx", dtype=str)
+    if 'System' in df.columns and 'Failure Description' in df.columns:
+        df_ho = df[['System', 'Failure Description']].dropna(subset=['System'])
+        df_ho['System'] = df_ho['System'].astype(str).str.strip()
+        df_ho['Failure Description'] = df_ho['Failure Description'].fillna("無資料")
+        return df_ho
+    return pd.DataFrame(columns=['System', 'Failure Description'])
+
 try: df_rca = load_rca_data()
 except FileNotFoundError: st.error("找不到 RCA.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
 
@@ -99,6 +111,26 @@ except FileNotFoundError: st.error("找不到 TS2_mapping.xlsx 檔案！請確�
 
 try: df_note = load_note_data()
 except FileNotFoundError: st.error("找不到 TS2_note.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
+
+try: df_ho = load_handover_data()
+except FileNotFoundError: st.error("找不到 Chameleon handover status.xlsx 檔案！請確認它是否與 app.py 放在一起。"); st.stop()
+
+# --- 繪製日夜交接狀態的共用元件 ---
+def render_handover_status(ts2_id, df_ho, is_editing=False):
+    # 使用 Regex 精準配對 TS2#號碼 (忽略空格與換行干擾)
+    pattern = f"^TS2.*#\\s*{ts2_id}(?:[^0-9]|$)"
+    matched_ho = df_ho[df_ho['System'].str.match(pattern, na=False)]
+    
+    if is_editing:
+        st.markdown("#### 🔄 日夜交接狀態 (唯讀)")
+    else:
+        st.markdown("**🔄 日夜交接狀態 (唯讀):**")
+        
+    if matched_ho.empty:
+        st.caption("（無相關交接紀錄）")
+    else:
+        ho_desc = "\n---\n".join(matched_ho['Failure Description'].astype(str).tolist())
+        st.code(ho_desc, language="plaintext")
 
 # ★ 嚴格只取 Mapping 檔內的編號 ★
 valid_ts2_set = set()
@@ -328,6 +360,7 @@ with tab_map:
             st.success("✅ 找到對應的 SN 關聯資料！")
             for idx, row in match_df.iterrows():
                 ts2_id = row['TS2#']
+                
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
                     with c_title: st.markdown(f"### 🔹 系統標號：TS2#{ts2_id}")
@@ -436,6 +469,49 @@ with tab_status:
                                     repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
                                     contents = repo.get_contents("TS2_note.xlsx")
                                     repo.update_file(contents.path, "Update TS2_note.xlsx via Streamlit Upload", excel_bytes, contents.sha)
+                                    st.cache_data.clear()
+                                    st.success("✅ 檔案已成功更新！畫面即將重新載入...")
+                                    time.sleep(1.5)
+                                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 解析檔案失敗：{e}")
+                    
+        # ★ 新增：Handover 檔案上傳/下載區塊 ★
+        with st.expander("📤 上傳 / 下載 Handover", expanded=False):
+            try:
+                with open("Chameleon handover status.xlsx", "rb") as f:
+                    st.download_button(label="📥 下載目前 Handover 檔", data=f, file_name="Chameleon handover status.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            except FileNotFoundError:
+                pass
+                
+            st.divider()
+            uploaded_ho = st.file_uploader("選擇 Handover 檔案 (.xlsx)", type=["xlsx"], key="upload_ho")
+            if uploaded_ho:
+                try:
+                    df_ho_test = pd.read_excel(uploaded_ho, dtype=str)
+                    
+                    missing_ho_cols = [c for c in ['System', 'Failure Description'] if c not in df_ho_test.columns]
+                    if missing_ho_cols:
+                        st.error(f"❌ 嚴重錯誤：找不到 {', '.join(missing_ho_cols)} 欄位，無法解析此檔案。")
+                    else:
+                        st.success(f"✅ 驗證通過！共讀取到 {len(df_ho_test)} 筆交接資料。")
+                        
+                        if st.button("🚀 確認上傳並覆蓋至 GitHub", key="btn_upload_ho", use_container_width=True, type="primary"):
+                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                            else:
+                                with st.spinner("🔄 上傳中..."):
+                                    uploaded_ho.seek(0)
+                                    excel_bytes = uploaded_ho.read()
+                                    with open("Chameleon handover status.xlsx", "wb") as f: f.write(excel_bytes)
+                                    repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+                                    
+                                    try:
+                                        contents = repo.get_contents("Chameleon handover status.xlsx")
+                                        repo.update_file(contents.path, "Update Chameleon handover status.xlsx via Streamlit Upload", excel_bytes, contents.sha)
+                                    except Exception:
+                                        repo.create_file("Chameleon handover status.xlsx", "Upload Chameleon handover status.xlsx via Streamlit", excel_bytes)
+                                        
                                     st.cache_data.clear()
                                     st.success("✅ 檔案已成功更新！畫面即將重新載入...")
                                     time.sleep(1.5)
@@ -579,6 +655,8 @@ with tab_status:
                         new_notice = st.checkbox("🚨 設定為特別標註 (紅色按鈕)", value=(val_notice == '1'), key=f"t3_edit_notice_{ts2_id}")
                         new_note = st.text_area("詳細備註內容", value=val_note_str, height=100, label_visibility="collapsed", key=f"t3_edit_note_{ts2_id}")
 
+                        render_handover_status(ts2_id, df_ho, is_editing=True)
+
                         st.write("")
                         if st.button("💾 儲存修改並同步至 GitHub", key=f"t3_save_btn_{ts2_id}", type="primary", use_container_width=True):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
@@ -648,5 +726,7 @@ with tab_status:
                             st.error(f"**{display_note}**")
                         else:
                             st.info(f"**{display_note}**")
+                            
+                        render_handover_status(ts2_id, df_ho, is_editing=False)
         else:
             st.error(f"⚠️ 找不到該筆資料。")
