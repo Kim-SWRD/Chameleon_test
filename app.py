@@ -33,13 +33,13 @@ ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 # ==========================================
 # 📑 建立頂部切換分頁 (原生 st.tabs)
 # ==========================================
-tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔍 故障排除", "🔄 Mapping查詢", "📊 TS2 STATUS", "📋 追踨問題"])
+tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔍 SOP", "🔄 Mapping", "📊 WIP", "📋 追踨"])
 
 # ==========================================
-# 分頁 1: 故障排除
+# 分頁 1: 故障排除 (SOP)
 # ==========================================
 with tab_rca:
-    st.header("🔍 故障排除")
+    st.header("🔍 SOP")
     with st.container(border=True):
         unique_stations = [x for x in df_rca["STATION"].unique() if x != "無資料"]
         station_options = ["ALL"] + unique_stations
@@ -98,12 +98,12 @@ with tab_rca:
                 if meta_info: st.caption(" | ".join(meta_info))
 
 # ==========================================
-# 分頁 2: Mapping查詢
+# 分頁 2: Mapping
 # ==========================================
 with tab_map:
     col_title, col_upload = st.columns([0.6, 0.4])
     with col_title:
-        st.header("🔄 Mapping查詢")
+        st.header("🔄 Mapping")
     with col_upload:
         with st.expander("📤 上傳 / 下載 TS2_mapping", expanded=False):
             try:
@@ -132,9 +132,9 @@ with tab_map:
                         st.success(f"✅ 驗證通過！共讀取到 {len(df_test)} 筆資料。")
                         if missing_sn: st.warning(f"⚠️ 警告：檔案缺少以下欄位 ({', '.join(missing_sn)})，仍可強制上傳。")
                             
-                        if st.button("🚀 確認上傳並覆蓋至 GitHub", use_container_width=True, type="primary"):
+                        if st.button("🚀 確認上傳並覆蓋", use_container_width=True, type="primary"):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
                             else:
                                 with st.spinner("🔄 上傳中..."):
                                     uploaded_file.seek(0)
@@ -144,7 +144,7 @@ with tab_map:
                                     contents = repo.get_contents("TS2_mapping.xlsx")
                                     repo.update_file(contents.path, "Update TS2_mapping.xlsx via Streamlit Upload", excel_bytes, contents.sha)
                                     st.cache_data.clear()
-                                    st.success("✅ 檔案已成功更新！畫面即重新載入...")
+                                    st.success("✅ 檔案已成功更新！畫面即將重新載入...")
                                     time.sleep(1.5)
                                     st.rerun()
                 except Exception as e:
@@ -264,9 +264,9 @@ with tab_map:
                         with s_c3: st.selectbox("FT", station_opts_rca, index=get_station_idx(row.get('FT')), key=f"t2_edit_ft_{ts2_id}")
                             
                         st.write("") 
-                        if st.button("💾 儲存修改並同步至 GitHub", key=f"t2_save_btn_{ts2_id}", type="primary", use_container_width=True):
+                        if st.button("💾 儲存修改並同步", key=f"t2_save_btn_{ts2_id}", type="primary", use_container_width=True):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
                             else:
                                 with st.spinner("🔄 正在更新..."):
                                     try:
@@ -282,7 +282,7 @@ with tab_map:
                                         df_upload.rename(columns={"TS2#": "NO."}, inplace=True)
                                         save_df_to_github(df_upload, "TS2_mapping.xlsx", "TS2_mapping.xlsx", f"Update TS2#{ts2_id} via Streamlit")
                                         st.cache_data.clear()
-                                        st.success("✅ 成功同步至 GitHub！畫面即將重新載入...")
+                                        st.success("✅ 成功同步！畫面即將重新載入...")
                                         time.sleep(1.5)
                                         st.rerun()
                                     except Exception as e:
@@ -293,12 +293,12 @@ with tab_map:
             st.error(f"⚠️ 找不到資料，請確認輸入是否有誤。")
 
 # ==========================================
-# 分頁 3: TS2 STATUS
+# 分頁 3: WIP (TS2 STATUS)
 # ==========================================
 with tab_status:
     col_title_t3, col_upload_t3 = st.columns([0.6, 0.4])
     with col_title_t3:
-        st.header("📊 TS2 STATUS")
+        st.header("📊 WIP")
     with col_upload_t3:
         with st.expander("📤 上傳 / 下載 TS2_note", expanded=False):
             try:
@@ -316,9 +316,9 @@ with tab_status:
                     else:
                         missing_note_cols = [c for c in ['NOTE', 'NOTICE'] if c not in df_note_test.columns]
                         st.success(f"✅ 驗證通過！共讀取到 {len(df_note_test)} 筆備註資料。")
-                        if st.button("🚀 確認上傳並覆蓋至 GitHub", key="btn_upload_note", use_container_width=True, type="primary"):
+                        if st.button("🚀 確認上傳並覆蓋", key="btn_upload_note", use_container_width=True, type="primary"):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
                             else:
                                 with st.spinner("🔄 上傳中..."):
                                     uploaded_note.seek(0)
@@ -350,9 +350,9 @@ with tab_status:
                         st.error(f"❌ 嚴重錯誤：找不到 {', '.join(missing_ho_cols)} 欄位。")
                     else:
                         st.success(f"✅ 驗證通過！共讀取到 {len(df_ho_test)} 筆交接資料。")
-                        if st.button("🚀 確認上傳並覆蓋至 GitHub", key="btn_upload_ho", use_container_width=True, type="primary"):
+                        if st.button("🚀 確認上傳並覆蓋", key="btn_upload_ho", use_container_width=True, type="primary"):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
                             else:
                                 with st.spinner("🔄 上傳中..."):
                                     uploaded_ho.seek(0)
@@ -405,7 +405,7 @@ with tab_status:
             """
     if dynamic_custom_css_t3: st.markdown(f"<style>{dynamic_custom_css_t3}</style>", unsafe_allow_html=True)
 
-    panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: PASS({t3_pass_cnt}) / 黃色: FAIL({t3_fail_cnt}) / 紅色: NOTICE({t3_notice_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 框線放大: 目前選取)"
+    panel_title_t3 = f"🎛️ WIP 快速面板 (綠色: PASS({t3_pass_cnt}) / 黃色: FAIL({t3_fail_cnt}) / 紅色: NOTICE({t3_notice_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 框線放大: 目前選取)"
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
@@ -476,9 +476,9 @@ with tab_status:
                         render_handover_status(ts2_id, df_ho, is_editing=True)
 
                         st.write("")
-                        if st.button("💾 儲存修改並同步至 GitHub", key=f"t3_save_btn_{ts2_id}", type="primary", use_container_width=True):
+                        if st.button("💾 儲存修改並同步", key=f"t3_save_btn_{ts2_id}", type="primary", use_container_width=True):
                             if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
                             else:
                                 with st.spinner("🔄 正在更新並上傳 Mapping 與 Note 檔案..."):
                                     try:
@@ -506,7 +506,7 @@ with tab_status:
                                             
                                         save_df_to_github(df_note, "TS2_note.xlsx", "TS2_note.xlsx", f"Update TS2#{ts2_id} Note via Tab3")
                                         st.cache_data.clear()
-                                        st.success("✅ 成功同步 Mapping 與 Note 資料至 GitHub！畫面即將重新載入...")
+                                        st.success("✅ 成功同步 Mapping 與 Note 資料！畫面即將重新載入...")
                                         time.sleep(1.5)
                                         st.rerun()
                                     except Exception as e:
@@ -537,7 +537,7 @@ with tab_status:
             st.error(f"⚠️ 找不到該筆資料。")
 
 # ==========================================
-# 分頁 4: 追踨問題 (Work Items)
+# 分頁 4: 追踨
 # ==========================================
 with tab_work:
     def cb_update_work_status(item_id, new_status):
@@ -559,7 +559,7 @@ with tab_work:
 
     col_w_title, col_w_upload, col_w_add = st.columns([0.4, 0.4, 0.2])
     with col_w_title:
-        st.header("📋 追踨問題")
+        st.header("📋 追踨")
         
     with col_w_upload:
         with st.expander("📤 上/下傳 Work_item", expanded=False):
@@ -577,7 +577,7 @@ with tab_work:
                     st.success(f"✅ 驗證通過！共讀取到 {len(df_work_test)} 筆資料。")
                     if st.button("🚀 確認上傳並覆蓋", key="btn_upload_work", use_container_width=True, type="primary"):
                         if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                            st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                            st.error("❌ 尚未設定系統同步憑證或 Repo！")
                         else:
                             with st.spinner("🔄 上傳中..."):
                                 uploaded_work.seek(0)
@@ -655,7 +655,7 @@ with tab_work:
             
             st.write("")
             col_submit, col_cancel = st.columns(2)
-            with col_submit: w_submitted = st.button("💾 儲存並同步至 GitHub", type="primary", use_container_width=True)
+            with col_submit: w_submitted = st.button("💾 儲存並同步", type="primary", use_container_width=True)
             with col_cancel: w_canceled = st.button("❌ 取消", type="secondary", use_container_width=True)
                 
             if w_canceled:
@@ -664,7 +664,7 @@ with tab_work:
 
             if w_submitted:
                 if not w_no.strip(): st.error("⚠️ 請填寫或選擇 NO. (系統編號)！")
-                elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets: st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets: st.error("❌ 尚未設定系統同步憑證或 Repo！")
                 else:
                     with st.spinner("🔄 上傳中..."):
                         new_id = get_next_work_id(df_work)
