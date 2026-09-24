@@ -8,93 +8,11 @@ from github import Github
 def get_custom_css():
     return """
     <style>
+    /* 共用按鈕顏色 */
     button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
     button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
     button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
-    
-    /* 放大原生 Tab 字體 */
-    button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; margin: 0 !important; }
-
-    /* =========================================================
-       🔥 終極破解版：100% 完美還原您的截圖 (上3下1，兩條灰底線)
-       ========================================================= */
-    /* 1. 破解 Streamlit 隱藏的高度裁切 (這就是一直看不到第二行的元兇) */
-    div[data-testid="stTabs"] > div {
-        overflow: visible !important;
-        height: auto !important; 
-    }
-    
-    /* 2. 讓分頁清單變成 Flex 且允許換行，移除原生底線，因為我們要自己畫兩層 */
-    div[data-testid="stTabs"] div[data-baseweb="tab-list"] {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 0 !important;
-        padding: 0 !important;
-        margin-bottom: 20px !important;
-        border-bottom: none !important; 
-        position: relative !important;
-    }
-    
-    /* 3. 設定按鈕固定高度與間距，並向左靠齊 */
-    button[data-baseweb="tab"] {
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        height: 45px !important;
-        background: transparent !important;
-        border: none !important;
-        margin: 0 !important;
-        margin-right: 24px !important; /* 按鈕之間的距離 */
-        padding: 0 !important;
-        position: relative !important;
-    }
-    
-    /* 4. ✨ 終極換行魔法：強制第 3 個標籤右側佔滿，把第 4 個擠到下一行！ */
-    button[data-baseweb="tab"]:nth-child(3) {
-        margin-right: 100% !important; 
-    }
-    button[data-baseweb="tab"]:nth-child(4) {
-        margin-right: 0 !important; 
-    }
-    
-    /* 5. 畫出第一行的全螢幕灰色底線 */
-    div[data-testid="stTabs"] div[data-baseweb="tab-list"]::before {
-        content: "" !important;
-        position: absolute !important;
-        top: 45px !important; /* 剛好在第一行按鈕的正下方 */
-        left: 0 !important; right: 0 !important;
-        border-bottom: 1px solid rgba(49, 51, 63, 0.15) !important;
-        z-index: 0 !important;
-    }
-    
-    /* 6. 畫出第二行的全螢幕灰色底線 */
-    div[data-testid="stTabs"] div[data-baseweb="tab-list"]::after {
-        content: "" !important;
-        position: absolute !important;
-        bottom: 0 !important; /* 剛好在第二行按鈕的正下方 */
-        left: 0 !important; right: 0 !important;
-        border-bottom: 1px solid rgba(49, 51, 63, 0.15) !important;
-        z-index: 0 !important;
-    }
-    
-    /* 7. 隱藏原生會因為換行而錯位的動畫滑塊 */
-    div[data-baseweb="tab-highlight"] { display: none !important; }
-    
-    /* 8. 完美模擬原生的紅色底線 (只在選中的文字下方出現) */
-    button[data-baseweb="tab"][aria-selected="true"] p {
-        color: #ff4b4b !important; /* Streamlit 原生紅 */
-    }
-    button[data-baseweb="tab"][aria-selected="true"]::after {
-        content: "" !important;
-        position: absolute !important;
-        bottom: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        height: 2px !important;
-        background-color: #ff4b4b !important;
-        z-index: 2 !important; /* 確保紅線蓋在灰線上面 */
-    }
 
     /* =========================================================
        網格面板與其他樣式修正 
