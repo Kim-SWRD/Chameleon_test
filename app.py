@@ -31,7 +31,7 @@ station_opts_rca = ["無資料", "PASS", "FAIL"]
 ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 
 # ==========================================
-# 📑 建立頂部切換分頁 (原生 st.tabs)
+# 📑 建立頂部切換分頁 (原生 st.tabs，享受最完美的換行與紅線效果)
 # ==========================================
 tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔍 故障排除", "🔄 Mapping查詢", "📊 TS2 STATUS", "📋 追踨問題"])
 
