@@ -12,7 +12,6 @@ if "map_col" not in st.session_state: st.session_state["map_col"] = "TS2#"
 if "map_search_input" not in st.session_state: st.session_state["map_search_input"] = ""
 if "status_active_ts2" not in st.session_state: st.session_state["status_active_ts2"] = ""
 if "w_add_no_input" not in st.session_state: st.session_state["w_add_no_input"] = ""
-if "active_tab" not in st.session_state: st.session_state["active_tab"] = "🔍 故障排除" # 紀錄當前分頁
 
 # --- 讀取資料 ---
 try: df_rca = load_rca_data()
@@ -32,31 +31,14 @@ station_opts_rca = ["無資料", "PASS", "FAIL"]
 ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 
 # ==========================================
-# 📑 自訂按鈕導覽列 (上3下1，手機版強制橫排)
+# 📑 建立頂部切換分頁 (原生 st.tabs)
 # ==========================================
-def set_tab(tab_name):
-    st.session_state["active_tab"] = tab_name
-
-# 第一列：上3 (帶有 mobile-nav-row1 錨點)
-st.markdown('<div class="mobile-nav-row1"></div>', unsafe_allow_html=True)
-c1, c2, c3 = st.columns(3)
-c1.button("🔍 故障排除", type="primary" if st.session_state["active_tab"]=="🔍 故障排除" else "secondary", on_click=set_tab, args=("🔍 故障排除",))
-c2.button("🔄 Mapping查詢", type="primary" if st.session_state["active_tab"]=="🔄 Mapping查詢" else "secondary", on_click=set_tab, args=("🔄 Mapping查詢",))
-c3.button("📊 TS2 STATUS", type="primary" if st.session_state["active_tab"]=="📊 TS2 STATUS" else "secondary", on_click=set_tab, args=("📊 TS2 STATUS",))
-
-# 第二列：下1 (帶有 mobile-nav-row2 錨點，單欄自然向左靠齊)
-st.markdown('<div class="mobile-nav-row2"></div>', unsafe_allow_html=True)
-c4 = st.columns(1)[0]
-c4.button("📋 追踨問題", type="primary" if st.session_state["active_tab"]=="📋 追踨問題" else "secondary", on_click=set_tab, args=("📋 追踨問題",))
-
-# 分隔線
-st.divider()
-
+tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔍 故障排除", "🔄 Mapping查詢", "📊 TS2 STATUS", "📋 追踨問題"])
 
 # ==========================================
 # 分頁 1: 故障排除
 # ==========================================
-if st.session_state["active_tab"] == "🔍 故障排除":
+with tab_rca:
     st.header("🔍 故障排除")
     with st.container(border=True):
         unique_stations = [x for x in df_rca["STATION"].unique() if x != "無資料"]
@@ -118,7 +100,7 @@ if st.session_state["active_tab"] == "🔍 故障排除":
 # ==========================================
 # 分頁 2: Mapping查詢
 # ==========================================
-if st.session_state["active_tab"] == "🔄 Mapping查詢":
+with tab_map:
     col_title, col_upload = st.columns([0.6, 0.4])
     with col_title:
         st.header("🔄 Mapping查詢")
@@ -313,7 +295,7 @@ if st.session_state["active_tab"] == "🔄 Mapping查詢":
 # ==========================================
 # 分頁 3: TS2 STATUS
 # ==========================================
-if st.session_state["active_tab"] == "📊 TS2 STATUS":
+with tab_status:
     col_title_t3, col_upload_t3 = st.columns([0.6, 0.4])
     with col_title_t3:
         st.header("📊 TS2 STATUS")
@@ -427,8 +409,7 @@ if st.session_state["active_tab"] == "📊 TS2 STATUS":
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
-        if len(valid_ts2_list) == 0:
-            st.info("尚無 TS2 資料")
+        if len(valid_ts2_list) == 0: st.info("尚無 TS2 資料")
         else:
             cols = st.columns(len(valid_ts2_list))
             for idx, ts2_val in enumerate(valid_ts2_list):
@@ -558,7 +539,7 @@ if st.session_state["active_tab"] == "📊 TS2 STATUS":
 # ==========================================
 # 分頁 4: 追踨問題 (Work Items)
 # ==========================================
-if st.session_state["active_tab"] == "📋 追踨問題":
+with tab_work:
     def cb_update_work_status(item_id, new_status):
         df_w = load_work_item_data().copy()
         idx = df_w[df_w['事項編號'] == item_id].index

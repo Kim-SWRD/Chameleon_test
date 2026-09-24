@@ -8,74 +8,42 @@ from github import Github
 def get_custom_css():
     return """
     <style>
-    /* 🌟 頂部邊距固定 60px */
-    .block-container { padding-top: 60px !important; }
-
-    /* 共用按鈕顏色 */
     button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
     button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
     button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
+    button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
     /* =========================================================
-       🔥 核心修正：解除 Streamlit 在手機端的強制換行 (上下堆疊)
+       🔥 完美還原原生 Tabs 換行 (100%符合截圖需求)
        ========================================================= */
-    /* 不論手機還是電腦，第一列與第二列一律強制保持水平橫排 (row) */
-    div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"],
-    div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-        gap: 6px !important;
-        width: 100% !important;
+    /* 1. 允許分頁標籤換行 */
+    div[data-baseweb="tab-list"] {
+        flex-wrap: wrap !important;
+        gap: 0px !important;
     }
-
-    /* 手機端 (@media max-width: 768px) 強制覆蓋 Streamlit 的 width: 100% */
-    @media (max-width: 768px) {
-        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            width: auto !important;
-            min-width: 0 !important;
-            flex: 0 0 auto !important;
-        }
-
-        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button,
-        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button {
-            width: auto !important;
-            min-width: 0 !important;
-            padding: 4px 6px !important;
-        }
-
-        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button p,
-        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button p {
-            font-size: 13px !important;
-            white-space: nowrap !important;
-            margin: 0 !important;
-        }
+    
+    /* 2. 利用 flex 的 order 屬性重新排列順序 */
+    button[data-baseweb="tab"]:nth-child(1) { order: 1 !important; }
+    button[data-baseweb="tab"]:nth-child(2) { order: 2 !important; }
+    button[data-baseweb="tab"]:nth-child(3) { order: 3 !important; }
+    
+    /* 3. ✨ 換行魔法：在第 3 和第 4 個標籤之間，安插一個 100% 寬度的隱形方塊，強制擠出下一行 */
+    div[data-baseweb="tab-list"]::before {
+        content: "" !important;
+        flex-basis: 100% !important;
+        order: 4 !important;
+        height: 10px !important; /* 這是兩行之間的完美間距 */
     }
-
-    /* 電腦端與平板樣式 */
-    @media (min-width: 769px) {
-        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            width: auto !important;
-            flex: 0 0 auto !important;
-        }
-
-        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button,
-        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button {
-            width: auto !important;
-            padding: 6px 12px !important;
-        }
-
-        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button p,
-        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button p {
-            font-size: 15px !important;
-            white-space: nowrap !important;
-            margin: 0 !important;
-        }
+    
+    /* 4. 第 4 個標籤順理成章掉到下一行的最左邊 */
+    button[data-baseweb="tab"]:nth-child(4) { 
+        order: 5 !important; 
+    }
+    
+    /* 5. 確保原生紅色/藍色動畫底線的順序不受影響 */
+    div[data-baseweb="tab-highlight"] { 
+        order: 99 !important; 
     }
 
     /* =========================================================
