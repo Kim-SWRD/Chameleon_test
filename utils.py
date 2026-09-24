@@ -14,6 +14,37 @@ def get_custom_css():
     button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
     button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
+    /* =========================================================
+       🔥 強制將分頁標籤 (Tabs) 換行顯示 (前3個一行，第4個換行) 
+       ========================================================= */
+    div[data-baseweb="tab-list"] {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+        padding-bottom: 5px !important;
+    }
+    button[data-baseweb="tab"] {
+        flex-basis: calc(33.33% - 6px) !important; /* 確保一行只塞得下 3 個 */
+        flex-grow: 1 !important;
+        background-color: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 8px !important;
+        margin: 0 !important;
+    }
+    button[data-baseweb="tab"]:nth-child(4) {
+        flex-basis: 100% !important; /* 第 4 個佔滿整條第二行 */
+        margin-top: 4px !important;
+    }
+    /* 隱藏原生動畫底線 (因為換行會導致原生底線錯位) */
+    div[data-baseweb="tab-highlight"] {
+        display: none !important;
+    }
+    /* 自訂目前選取中的 Tab 樣式 (用粗框取代底線) */
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #e6f2ff !important;
+        border: 2px solid #0056b3 !important;
+    }
+
+
     /* 網格面板樣式修正 (加入 t4-panel) */
     div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"],
     div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"],
@@ -153,11 +184,10 @@ def get_station_idx(val):
     return 0
 
 def save_df_to_github(df, filename, repo_path, commit_message):
-    # 🌟 關鍵修正：上傳 GitHub 之前，先強制存一份最新的到本地端
     try:
         df.to_excel(filename, index=False)
     except Exception:
-        pass # 防呆機制：防止您剛好在電腦上開著該 Excel 檔導致存檔被鎖定報錯
+        pass 
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
