@@ -32,22 +32,24 @@ station_opts_rca = ["無資料", "PASS", "FAIL"]
 ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 
 # ==========================================
-# 📑 絕對不跑版：自訂按鈕導覽列 (放寬比例，字體不折疊)
+# 📑 自訂按鈕導覽列 (絕對等比例對齊，防手機堆疊)
 # ==========================================
 def set_tab(tab_name):
     st.session_state["active_tab"] = tab_name
 
-# 第一列：上3 (將寬度放寬為 2.0, 2.5, 2.5，確保文字顯示完整)
-c1, c2, c3, _ = st.columns([2.0, 2.5, 2.5, 3.0])
+# 第一列：上3 (利用 CSS 標記 mobile-nav-row1 強制不換行)
+st.markdown('<div class="mobile-nav-row1"></div>', unsafe_allow_html=True)
+c1, c2, c3 = st.columns(3)
 c1.button("🔍 故障排除", type="primary" if st.session_state["active_tab"]=="🔍 故障排除" else "secondary", on_click=set_tab, args=("🔍 故障排除",), use_container_width=True)
 c2.button("🔄 Mapping查詢", type="primary" if st.session_state["active_tab"]=="🔄 Mapping查詢" else "secondary", on_click=set_tab, args=("🔄 Mapping查詢",), use_container_width=True)
 c3.button("📊 TS2 STATUS", type="primary" if st.session_state["active_tab"]=="📊 TS2 STATUS" else "secondary", on_click=set_tab, args=("📊 TS2 STATUS",), use_container_width=True)
 
-# 第二列：下1 (寬度設為 2.0，剛好與第一列的第一顆按鈕對齊！)
-c4, _ = st.columns([2.0, 8.0])
+# 第二列：下1 (利用一樣的 columns(3) 佈局，讓第4個按鈕完美對齊第1個)
+st.markdown('<div class="mobile-nav-row2"></div>', unsafe_allow_html=True)
+c4, c5, c6 = st.columns(3)
 c4.button("📋 追踨問題", type="primary" if st.session_state["active_tab"]=="📋 追踨問題" else "secondary", on_click=set_tab, args=("📋 追踨問題",), use_container_width=True)
 
-# 最後來一條乾淨的分隔線
+# 乾淨的分隔線
 st.divider()
 
 
