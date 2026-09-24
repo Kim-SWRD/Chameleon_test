@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 from github import Github
-from utils import *  # 導入我們拆分出來的所有工具函式
+from utils import *  # 導入工具函式
 
 st.set_page_config(page_title="卡美問題與 SN 查詢", layout="centered")
 st.markdown(get_custom_css(), unsafe_allow_html=True)
@@ -27,11 +27,11 @@ df_work = load_work_item_data()
 valid_ts2_list = get_valid_ts2_list(df_map)
 station_opts_rca = ["無資料", "PASS", "FAIL"]
 
-# 全域計算 TS2 STATUS (分頁3與分頁4共用)
+# 全域計算 TS2 STATUS
 ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 
 # ==========================================
-# 📑 建立頂部切換分頁
+# 📑 建立頂部切換分頁 (原生 st.tabs)
 # ==========================================
 tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔍 故障排除", "🔄 Mapping查詢", "📊 TS2 STATUS", "📋 追踨問題"])
 
@@ -644,12 +644,10 @@ with tab_work:
                 else:
                     btn_cols = st.columns(len(valid_ts2_list))
                     for idx, ts2_val in enumerate(valid_ts2_list):
-                        # 套用與 Tab3 一樣的 Button Type (Pass為綠，其它交由CSS上色)
                         state = ts2_status_states.get(ts2_val, "empty")
                         btn_type = "primary" if state == "pass" else "secondary"
                         btn_cols[idx].button(str(ts2_val), key=f"btn_w_add_{ts2_val}", on_click=set_add_no, args=(str(ts2_val),), type=btn_type)
 
-            # 其餘欄位
             w_desc = st.text_input("事項描述")
             w_c4, w_c5 = st.columns(2)
             w_date = w_c4.text_input("起始日期 (YYYY-MM-DD)", value=time.strftime("%Y-%m-%d"))
