@@ -12,40 +12,58 @@ def get_custom_css():
     button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
     button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
     button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
-    button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
+    button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; margin: 0 !important; }
 
     /* =========================================================
-       🔥 強制將分頁標籤 (Tabs) 換行顯示 (前3個一行，第4個換行) 
+       🔥 破解 Streamlit JavaScript 內聯樣式的終極排版
        ========================================================= */
-    div[data-baseweb="tab-list"] {
-        flex-wrap: wrap !important;
-        gap: 6px !important;
-        padding-bottom: 5px !important;
+    /* 1. 解開父容器的溢出隱藏限制 */
+    div[data-testid="stTabs"] > div {
+        overflow: visible !important;
     }
+    
+    /* 2. 透過 flex-wrap 允許換行，並設定間距 */
+    div[data-baseweb="tab-list"] {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        border-bottom: none !important;
+    }
+    
+    /* 3. 雙重鎖定寬度 (min & max)，讓 JS 的動態計算失效 */
     button[data-baseweb="tab"] {
-        flex-basis: calc(33.33% - 6px) !important; /* 確保一行只塞得下 3 個 */
-        flex-grow: 1 !important;
+        /* 計算：3等份減去 gap 的空間 */
+        flex: 1 1 calc(33.33% - 8px) !important;
+        min-width: calc(33.33% - 8px) !important;
+        max-width: calc(33.33% - 8px) !important;
+        
         background-color: #f8f9fa !important;
         border: 1px solid #dee2e6 !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         margin: 0 !important;
+        padding: 8px 0 !important;
     }
+    
+    /* 4. 針對第4個分頁，維持同樣寬度，因前3個已滿100%會自動掉到下一行並向左靠齊 */
     button[data-baseweb="tab"]:nth-child(4) {
-        flex-basis: 100% !important; /* 第 4 個佔滿整條第二行 */
-        margin-top: 4px !important;
+        flex: 0 0 calc(33.33% - 8px) !important;
+        min-width: calc(33.33% - 8px) !important;
+        max-width: calc(33.33% - 8px) !important;
+        margin-right: auto !important; /* 確保右側留白，靠左對齊 */
     }
-    /* 隱藏原生動畫底線 (因為換行會導致原生底線錯位) */
-    div[data-baseweb="tab-highlight"] {
-        display: none !important;
-    }
-    /* 自訂目前選取中的 Tab 樣式 (用粗框取代底線) */
+    
+    /* 隱藏預設會跑位的藍色動畫底線 */
+    div[data-baseweb="tab-highlight"] { display: none !important; }
+    
+    /* 選中時的樣式 (藍色粗框) */
     button[data-baseweb="tab"][aria-selected="true"] {
         background-color: #e6f2ff !important;
         border: 2px solid #0056b3 !important;
     }
 
-
-    /* 網格面板樣式修正 (加入 t4-panel) */
+    /* =========================================================
+       網格面板與其他樣式修正 
+       ========================================================= */
     div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"],
     div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"],
     div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] {
