@@ -8,61 +8,73 @@ from github import Github
 def get_custom_css():
     return """
     <style>
-    /* 🌟 恢復您要求的頂部距離：設定為 60px */
+    /* 🌟 頂部邊距固定 60px */
     .block-container { padding-top: 60px !important; }
 
-    /* 共用按鈕顏色 (Primary 綠色, Tertiary 藍色) */
+    /* 共用按鈕顏色 */
     button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
     button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
     button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
 
     /* =========================================================
-       🔥 手機版防堆疊 & 防文字裁切 終極裝甲
+       🔥 核心修正：解除 Streamlit 在手機端的強制換行 (上下堆疊)
        ========================================================= */
-    /* 強制這兩列在任何螢幕寬度下都必須橫排！打破 Streamlit 的手機端預設限制 */
+    /* 不論手機還是電腦，第一列與第二列一律強制保持水平橫排 (row) */
     div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"],
     div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 8px !important;
-    }
-    
-    /* 強制三個欄位平分寬度 */
-    div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-    div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: 33.33% !important;
-        flex: 1 1 33.33% !important;
-        min-width: 0 !important; /* 確保不會被擠爆 */
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 6px !important;
+        width: 100% !important;
     }
 
-    /* 放寬按鈕內邊距與文字換行限制，確保文字即使在小螢幕也能顯示不被裁成 ... */
-    div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button,
-    div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button {
-        padding: 5px 2px !important; /* 縮小左右 padding 騰出文字空間 */
-        height: 100% !important;
-    }
-    
-    div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button p,
-    div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button p {
-        font-size: 14px !important;
-        white-space: normal !important; /* 🌟 允許文字自動換行，避免出現 ... */
-        word-break: keep-all !important;
-        line-height: 1.2 !important;
-        text-align: center !important;
-    }
-    
-    @media (min-width: 768px) {
-        /* 電腦端螢幕夠大，恢復較大字體與單行顯示 */
-        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button p,
-        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button p {
-            font-size: 16px !important;
-            white-space: nowrap !important;
+    /* 手機端 (@media max-width: 768px) 強制覆蓋 Streamlit 的 width: 100% */
+    @media (max-width: 768px) {
+        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            width: auto !important;
+            min-width: 0 !important;
+            flex: 0 0 auto !important;
         }
+
         div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button,
         div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button {
-            padding: 8px 12px !important;
+            width: auto !important;
+            min-width: 0 !important;
+            padding: 4px 6px !important;
+        }
+
+        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button p,
+        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button p {
+            font-size: 13px !important;
+            white-space: nowrap !important;
+            margin: 0 !important;
+        }
+    }
+
+    /* 電腦端與平板樣式 */
+    @media (min-width: 769px) {
+        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            width: auto !important;
+            flex: 0 0 auto !important;
+        }
+
+        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button,
+        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button {
+            width: auto !important;
+            padding: 6px 12px !important;
+        }
+
+        div.element-container:has(.mobile-nav-row1) + div[data-testid="stHorizontalBlock"] button p,
+        div.element-container:has(.mobile-nav-row2) + div[data-testid="stHorizontalBlock"] button p {
+            font-size: 15px !important;
+            white-space: nowrap !important;
+            margin: 0 !important;
         }
     }
 

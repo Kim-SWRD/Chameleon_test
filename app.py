@@ -12,7 +12,7 @@ if "map_col" not in st.session_state: st.session_state["map_col"] = "TS2#"
 if "map_search_input" not in st.session_state: st.session_state["map_search_input"] = ""
 if "status_active_ts2" not in st.session_state: st.session_state["status_active_ts2"] = ""
 if "w_add_no_input" not in st.session_state: st.session_state["w_add_no_input"] = ""
-if "active_tab" not in st.session_state: st.session_state["active_tab"] = "🔍 故障排除" # 紀錄當前頁面
+if "active_tab" not in st.session_state: st.session_state["active_tab"] = "🔍 故障排除" # 紀錄當前分頁
 
 # --- 讀取資料 ---
 try: df_rca = load_rca_data()
@@ -32,24 +32,24 @@ station_opts_rca = ["無資料", "PASS", "FAIL"]
 ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 
 # ==========================================
-# 📑 自訂按鈕導覽列 (絕對等比例對齊，防手機堆疊)
+# 📑 自訂按鈕導覽列 (上3下1，手機版強制橫排)
 # ==========================================
 def set_tab(tab_name):
     st.session_state["active_tab"] = tab_name
 
-# 第一列：上3 (利用 CSS 標記 mobile-nav-row1 強制不換行)
+# 第一列：上3 (帶有 mobile-nav-row1 錨點)
 st.markdown('<div class="mobile-nav-row1"></div>', unsafe_allow_html=True)
 c1, c2, c3 = st.columns(3)
-c1.button("🔍 故障排除", type="primary" if st.session_state["active_tab"]=="🔍 故障排除" else "secondary", on_click=set_tab, args=("🔍 故障排除",), use_container_width=True)
-c2.button("🔄 Mapping查詢", type="primary" if st.session_state["active_tab"]=="🔄 Mapping查詢" else "secondary", on_click=set_tab, args=("🔄 Mapping查詢",), use_container_width=True)
-c3.button("📊 TS2 STATUS", type="primary" if st.session_state["active_tab"]=="📊 TS2 STATUS" else "secondary", on_click=set_tab, args=("📊 TS2 STATUS",), use_container_width=True)
+c1.button("🔍 故障排除", type="primary" if st.session_state["active_tab"]=="🔍 故障排除" else "secondary", on_click=set_tab, args=("🔍 故障排除",))
+c2.button("🔄 Mapping查詢", type="primary" if st.session_state["active_tab"]=="🔄 Mapping查詢" else "secondary", on_click=set_tab, args=("🔄 Mapping查詢",))
+c3.button("📊 TS2 STATUS", type="primary" if st.session_state["active_tab"]=="📊 TS2 STATUS" else "secondary", on_click=set_tab, args=("📊 TS2 STATUS",))
 
-# 第二列：下1 (利用一樣的 columns(3) 佈局，讓第4個按鈕完美對齊第1個)
+# 第二列：下1 (帶有 mobile-nav-row2 錨點，單欄自然向左靠齊)
 st.markdown('<div class="mobile-nav-row2"></div>', unsafe_allow_html=True)
-c4, c5, c6 = st.columns(3)
-c4.button("📋 追踨問題", type="primary" if st.session_state["active_tab"]=="📋 追踨問題" else "secondary", on_click=set_tab, args=("📋 追踨問題",), use_container_width=True)
+c4 = st.columns(1)[0]
+c4.button("📋 追踨問題", type="primary" if st.session_state["active_tab"]=="📋 追踨問題" else "secondary", on_click=set_tab, args=("📋 追踨問題",))
 
-# 乾淨的分隔線
+# 分隔線
 st.divider()
 
 
@@ -427,7 +427,8 @@ if st.session_state["active_tab"] == "📊 TS2 STATUS":
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
-        if len(valid_ts2_list) == 0: st.info("尚無 TS2 資料")
+        if len(valid_ts2_list) == 0:
+            st.info("尚無 TS2 資料")
         else:
             cols = st.columns(len(valid_ts2_list))
             for idx, ts2_val in enumerate(valid_ts2_list):
