@@ -12,7 +12,7 @@ if "map_col" not in st.session_state: st.session_state["map_col"] = "TS2#"
 if "map_search_input" not in st.session_state: st.session_state["map_search_input"] = ""
 if "status_active_ts2" not in st.session_state: st.session_state["status_active_ts2"] = ""
 if "w_add_no_input" not in st.session_state: st.session_state["w_add_no_input"] = ""
-if "active_tab" not in st.session_state: st.session_state["active_tab"] = "🔍 故障排除" # 紀錄當前分頁
+if "active_tab" not in st.session_state: st.session_state["active_tab"] = "🔍 故障排除" # 紀錄當前頁面
 
 # --- 讀取資料 ---
 try: df_rca = load_rca_data()
@@ -32,28 +32,23 @@ station_opts_rca = ["無資料", "PASS", "FAIL"]
 ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 
 # ==========================================
-# 📑 自訂按鈕導覽列 (絕對不會跑版)
+# 📑 返璞歸真版：自訂按鈕導覽列 (緊湊排列)
 # ==========================================
 def set_tab(tab_name):
     st.session_state["active_tab"] = tab_name
 
-st.write("") # 增加一點頂部空間
+# 這行 span 標記是讓 CSS 認得要排版的區域
+st.markdown('<span class="nav-wrap"></span>', unsafe_allow_html=True)
 
-# 第一行：前 3 個選單
-tc1, tc2, tc3 = st.columns(3)
-tc1.button("🔍 故障排除", type="primary" if st.session_state["active_tab"]=="🔍 故障排除" else "secondary", on_click=set_tab, args=("🔍 故障排除",), use_container_width=True)
-tc2.button("🔄 Mapping查詢", type="primary" if st.session_state["active_tab"]=="🔄 Mapping查詢" else "secondary", on_click=set_tab, args=("🔄 Mapping查詢",), use_container_width=True)
-tc3.button("📊 TS2 STATUS", type="primary" if st.session_state["active_tab"]=="📊 TS2 STATUS" else "secondary", on_click=set_tab, args=("📊 TS2 STATUS",), use_container_width=True)
+tc1, tc2, tc3, tc4 = st.columns(4)
+# 注意這裡都不加 use_container_width=True，讓按鈕維持剛好包住文字的大小
+tc1.button("🔍 故障排除", type="primary" if st.session_state["active_tab"]=="🔍 故障排除" else "secondary", on_click=set_tab, args=("🔍 故障排除",))
+tc2.button("🔄 Mapping查詢", type="primary" if st.session_state["active_tab"]=="🔄 Mapping查詢" else "secondary", on_click=set_tab, args=("🔄 Mapping查詢",))
+tc3.button("📊 TS2 STATUS", type="primary" if st.session_state["active_tab"]=="📊 TS2 STATUS" else "secondary", on_click=set_tab, args=("📊 TS2 STATUS",))
+tc4.button("📋 追踨問題", type="primary" if st.session_state["active_tab"]=="📋 追踨問題" else "secondary", on_click=set_tab, args=("📋 追踨問題",))
 
-# 畫第一條灰線
-st.markdown("<hr style='margin: 5px 0px 5px 0px; padding: 0px; border-color: #ddd;'>", unsafe_allow_html=True)
-
-# 第二行：第 4 個選單 (獨立一列的左邊第一格)
-bc1, bc2, bc3 = st.columns(3)
-bc1.button("📋 追踨問題", type="primary" if st.session_state["active_tab"]=="📋 追踨問題" else "secondary", on_click=set_tab, args=("📋 追踨問題",), use_container_width=True)
-
-# 畫第二條灰線
-st.markdown("<hr style='margin: 5px 0px 20px 0px; padding: 0px; border-color: #ddd;'>", unsafe_allow_html=True)
+# 一條簡單乾淨的灰線
+st.markdown('<hr class="nav-divider">', unsafe_allow_html=True)
 
 
 # ==========================================
@@ -117,7 +112,6 @@ if st.session_state["active_tab"] == "🔍 故障排除":
                 if row['Ref Log'] != "無資料": meta_info.append(f"**Log:** {row['Ref Log']}")
                 if row['REV'] != "無資料": meta_info.append(f"**REV:** {row['REV']}")
                 if meta_info: st.caption(" | ".join(meta_info))
-
 
 # ==========================================
 # 分頁 2: Mapping查詢
@@ -313,7 +307,6 @@ if st.session_state["active_tab"] == "🔄 Mapping查詢":
                         st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
             st.error(f"⚠️ 找不到資料，請確認輸入是否有誤。")
-
 
 # ==========================================
 # 分頁 3: TS2 STATUS
