@@ -8,56 +8,14 @@ from github import Github
 def get_custom_css():
     return """
     <style>
-    /* 減少 Streamlit 頂部預設巨大空白 */
-    .block-container {
-        padding-top: 2rem !important;
-    }
+    /* 🌟 恢復您要求的頂部距離：設定為 60px */
+    .block-container { padding-top: 60px !important; }
 
-    /* 共用按鈕顏色 */
+    /* 共用按鈕顏色 (Primary 綠色, Tertiary 藍色) */
     button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
     button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
     button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
-
-    /* =========================================================
-       🔥 完美緊湊按鈕列 (上3下1，向左靠齊，無多餘空白)
-       ========================================================= */
-    /* 隱藏標籤元素本身，避免佔用高度 */
-    div.element-container:has(span.nav-wrap) { 
-        height: 0px !important; 
-        margin: 0px !important; 
-        padding: 0px !important;
-        overflow: hidden !important; 
-        display: block !important;
-    }
-    
-    /* 重設按鈕列的 Flex 屬性，縮小間距 */
-    div.element-container:has(span.nav-wrap) + div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        gap: 8px 12px !important; /* 上下行距 8px，左右按鈕間距 12px */
-    }
-    
-    /* 將每個按鈕外圍的 column 寬度設為"自動適應文字"，絕不在手機端被拉長 */
-    div.element-container:has(span.nav-wrap) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: auto !important;
-        flex: 0 0 auto !important;
-        min-width: fit-content !important;
-        padding: 0 !important;
-    }
-    
-    /* 🔥 強制第 4 個按鈕 (追蹤問題) 掉到下一行並向左靠齊 */
-    div.element-container:has(span.nav-wrap) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(4) {
-        flex-basis: 100% !important; 
-        margin-top: 4px !important; /* 兩行之間的緊湊間距 */
-    }
-
-    /* 緊湊的分隔灰線 */
-    hr.nav-divider {
-        margin-top: 15px !important;
-        margin-bottom: 20px !important;
-        border: none;
-        border-top: 1px solid rgba(49, 51, 63, 0.2);
-    }
 
     /* =========================================================
        網格面板與其他樣式修正 
