@@ -1,192 +1,34 @@
 import streamlit as st
 import pandas as pd
-import io
 import time
-import re
 from github import Github
+from utils import *  # 導入我們拆分出來的所有工具函式
 
 st.set_page_config(page_title="卡美問題與 SN 查詢", layout="centered")
-
-# --- 自訂 CSS 樣式 ---
-st.markdown("""
-<style>
-button[kind="primary"] { background-color: #28a745 !important; border-color: #28a745 !important; color: white !important; }
-button[kind="primary"]:hover { background-color: #218838 !important; border-color: #1e7e34 !important; }
-button[kind="tertiary"] { background-color: #007bff !important; border-color: #007bff !important; color: white !important; }
-button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
-button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
-
-/* 網格面板樣式修正 */
-div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"],
-div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] {
-    display: grid !important; grid-template-columns: repeat(10, 1fr) !important; gap: 4px !important; width: 100% !important; padding-bottom: 3px !important;
-}
-div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div[data-testid="column"] { 
-    width: 100% !important; min-width: 0 !important; padding: 0 !important; 
-}
-div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button,
-div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button {
-    width: 200% !important; aspect-ratio: 1 / 1 !important; border-radius: 6px !important; padding: 0 !important; margin: 0 !important; min-height: 0 !important; height: auto !important; display: flex !important; align-items: center !important; justify-content: center !important; transition: all 0.2s ease-in-out !important;
-}
-div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button > div,
-div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button > div { 
-    display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; 
-}
-div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] button p,
-div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] button p { 
-    font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; 
-}
-div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
-</style>
-""", unsafe_allow_html=True)
+st.markdown(get_custom_css(), unsafe_allow_html=True)
 
 # --- 初始化 Session State ---
 if "map_col" not in st.session_state: st.session_state["map_col"] = "TS2#"
 if "map_search_input" not in st.session_state: st.session_state["map_search_input"] = ""
 if "status_active_ts2" not in st.session_state: st.session_state["status_active_ts2"] = ""
+if "w_add_no_input" not in st.session_state: st.session_state["w_add_no_input"] = ""
 
-# --- 讀取與快取資料 ---
-@st.cache_data(ttl=60)
-def load_rca_data():
-    df = pd.read_excel("RCA.xlsx", dtype=str)
-    df.fillna("無資料", inplace=True)
-    return df
-
-@st.cache_data(ttl=60)
-def load_mapping_data():
-    df = pd.read_excel("TS2_mapping.xlsx", dtype=str)
-    rename_dict = {}
-    for col in df.columns:
-        col_upper = str(col).upper()
-        if "NO." in col_upper or "TS2#" in col_upper: rename_dict[col] = "NO."
-        elif "CSM BASE" in col_upper or "CSM_BASE" in col_upper: rename_dict[col] = "CSM BASE"
-        elif "CSM TRAY" in col_upper or "CSM_TRAY" in col_upper: rename_dict[col] = "CSM TRAY"
-        elif "FULL SYS" in col_upper or "FULL_SYS" in col_upper: rename_dict[col] = "FULL SYS"
-        elif "JTAG" in col_upper: rename_dict[col] = "JTAG"
-        elif "AOT" in col_upper: rename_dict[col] = "AOT"
-        elif "FT" in col_upper: rename_dict[col] = "FT"
-        elif "STATUS" in col_upper: rename_dict[col] = "STATUS"
-        elif "OWNER" in col_upper: rename_dict[col] = "OWNER"
-        elif "FAILURE BIN" in col_upper or "FAIL BIN" in col_upper or "NOTE" in col_upper: rename_dict[col] = "Failure BIN"
-            
-    df.rename(columns=rename_dict, inplace=True)
-    if 'NO.' not in df.columns:
-        st.error("Excel 中找不到包含 'NO.' 的欄位，請檢查檔案標題列是否有誤。")
-        st.stop()
-        
-    df['NO.'] = df['NO.'].ffill()
-    df = df.dropna(subset=['NO.'])
-    df = df.groupby('NO.', as_index=False).first()
-    df["NO."] = df["NO."].astype(str).str.replace(r'\.0$', '', regex=True)
-    df.rename(columns={"NO.": "TS2#"}, inplace=True) 
-    df.fillna("無資料", inplace=True)
-    return df
-
-@st.cache_data(ttl=60)
-def load_note_data():
-    df = pd.read_excel("TS2_note.xlsx", dtype=str)
-    if 'NO.' in df.columns:
-        df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
-    if 'NOTICE' not in df.columns:
-        df['NOTICE'] = '0'
-    df.fillna("無資料", inplace=True)
-    return df
-
-@st.cache_data(ttl=60)
-def load_handover_data():
-    df = pd.read_excel("Chameleon handover status.xlsx", dtype=str)
-    if 'System' in df.columns and 'Failure Description' in df.columns:
-        df_ho = df[['System', 'Failure Description']].dropna(subset=['System'])
-        df_ho['System'] = df_ho['System'].astype(str).str.strip()
-        df_ho['Failure Description'] = df_ho['Failure Description'].fillna("無資料")
-        return df_ho
-    return pd.DataFrame(columns=['System', 'Failure Description'])
-
-@st.cache_data(ttl=60)
-def load_work_item_data():
-    try:
-        df = pd.read_excel("Work_item.xlsx", dtype=str)
-        if 'NO.' in df.columns:
-            df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
-        
-        # 檢查並自動補齊「事項編號」欄位
-        if '事項編號' not in df.columns:
-            df.insert(0, '事項編號', [f"W-{i:03d}" for i in range(1, len(df) + 1)])
-            try:
-                df.to_excel("Work_item.xlsx", index=False)
-            except PermissionError:
-                pass # 防呆：忽略 Excel 檔案被打開鎖定的錯誤
-            
-        df.fillna("無資料", inplace=True)
-        return df
-    except FileNotFoundError:
-        return pd.DataFrame(columns=['事項編號', '工作狀態', 'BUILD', 'NO.', '事項描述', '回報狀況', '起始日期', '經手人員', 'Station'])
-
+# --- 讀取資料 ---
 try: df_rca = load_rca_data()
 except FileNotFoundError: st.error("找不到 RCA.xlsx"); st.stop()
-
 try: df_map = load_mapping_data()
 except FileNotFoundError: st.error("找不到 TS2_mapping.xlsx"); st.stop()
-
 try: df_note = load_note_data()
 except FileNotFoundError: st.error("找不到 TS2_note.xlsx"); st.stop()
-
 try: df_ho = load_handover_data()
 except FileNotFoundError: st.error("找不到 Chameleon handover status.xlsx"); st.stop()
-
 df_work = load_work_item_data()
 
-def get_next_work_id(df):
-    if df.empty or '事項編號' not in df.columns:
-        return "W-001"
-    ids = df['事項編號'].astype(str).str.extract(r'W-(\d+)')[0].dropna().astype(int)
-    if ids.empty:
-        return "W-001"
-    return f"W-{ids.max() + 1:03d}"
+valid_ts2_list = get_valid_ts2_list(df_map)
+station_opts_rca = ["無資料", "PASS", "FAIL"]
 
-def render_handover_status(ts2_id, df_ho, is_editing=False):
-    pattern = f"^TS2.*#\\s*{ts2_id}(?:[^0-9]|$)"
-    matched_ho = df_ho[df_ho['System'].str.match(pattern, na=False)]
-    
-    if is_editing: st.markdown("#### 🔄 日夜交接狀態 (唯讀)")
-    else: st.markdown("**🔄 日夜交接狀態 (唯讀):**")
-        
-    if matched_ho.empty:
-        st.caption("（無相關交接紀錄）")
-    else:
-        ho_desc = "\n---\n".join(matched_ho['Failure Description'].astype(str).tolist())
-        st.code(ho_desc, language="plaintext")
-
-valid_ts2_set = set()
-for v in df_map["TS2#"].dropna().astype(str):
-    if v.strip() and v.strip() != "無資料" and v.strip().lower() != "nan":
-        valid_ts2_set.add(v.strip())
-
-def natural_sort_key(s):
-    return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
-valid_ts2_list = sorted(list(valid_ts2_set), key=natural_sort_key)
-
-station_opts = ["無資料", "PASS", "FAIL"]
-def get_station_idx(val):
-    if pd.isna(val) or str(val).strip() == "無資料": return 0
-    v = str(val).strip().upper()
-    if v == "PASS": return 1
-    if v == "FAIL": return 2
-    return 0
-
-def save_df_to_github(df, filename, repo_path, commit_message):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
-    excel_data = output.getvalue()
-    
-    repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
-    try:
-        contents = repo.get_contents(repo_path)
-        repo.update_file(contents.path, commit_message, excel_data, contents.sha)
-    except Exception:
-        repo.create_file(repo_path, commit_message, excel_data)
+# 全域計算 TS2 STATUS (分頁3與分頁4共用)
+ts2_status_states, ts2_notice_states = get_ts2_states(df_map, df_note)
 
 # ==========================================
 # 📑 建立頂部切換分頁
@@ -255,7 +97,6 @@ with tab_rca:
                 if row['REV'] != "無資料": meta_info.append(f"**REV:** {row['REV']}")
                 if meta_info: st.caption(" | ".join(meta_info))
 
-
 # ==========================================
 # 分頁 2: Mapping查詢
 # ==========================================
@@ -303,7 +144,7 @@ with tab_map:
                                     contents = repo.get_contents("TS2_mapping.xlsx")
                                     repo.update_file(contents.path, "Update TS2_mapping.xlsx via Streamlit Upload", excel_bytes, contents.sha)
                                     st.cache_data.clear()
-                                    st.success("✅ 檔案已成功更新！畫面即將重新載入...")
+                                    st.success("✅ 檔案已成功更新！畫面即重新載入...")
                                     time.sleep(1.5)
                                     st.rerun()
                 except Exception as e:
@@ -356,14 +197,9 @@ with tab_map:
         if is_selected:
             dynamic_yellow_css_t2 += f"""
             div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{
-                border: 4px solid #0056b3 !important; 
-                box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important;
-                transform: scale(1.15) !important;
-                position: relative !important;
-                z-index: 99 !important;
+                border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important;
             }}
             """
-    
     if dynamic_yellow_css_t2: st.markdown(f"<style>{dynamic_yellow_css_t2}</style>", unsafe_allow_html=True)
 
     panel_title_t2 = f"🎛️ TS2# 快速點選面板 (綠色: 完整({full_cnt}) / 黃色: 缺件({partial_cnt}) / 灰色: 無資料({empty_cnt}) / 框線放大: 目前選取)"
@@ -423,9 +259,9 @@ with tab_map:
                         st.divider()
                         st.markdown("#### 🔍 站點狀態")
                         s_c1, s_c2, s_c3 = st.columns(3)
-                        with s_c1: st.selectbox("JTAG", station_opts, index=get_station_idx(row.get('JTAG')), key=f"t2_edit_jtag_{ts2_id}")
-                        with s_c2: st.selectbox("AOT", station_opts, index=get_station_idx(row.get('AOT')), key=f"t2_edit_aot_{ts2_id}")
-                        with s_c3: st.selectbox("FT", station_opts, index=get_station_idx(row.get('FT')), key=f"t2_edit_ft_{ts2_id}")
+                        with s_c1: st.selectbox("JTAG", station_opts_rca, index=get_station_idx(row.get('JTAG')), key=f"t2_edit_jtag_{ts2_id}")
+                        with s_c2: st.selectbox("AOT", station_opts_rca, index=get_station_idx(row.get('AOT')), key=f"t2_edit_aot_{ts2_id}")
+                        with s_c3: st.selectbox("FT", station_opts_rca, index=get_station_idx(row.get('FT')), key=f"t2_edit_ft_{ts2_id}")
                             
                         st.write("") 
                         if st.button("💾 儲存修改並同步至 GitHub", key=f"t2_save_btn_{ts2_id}", type="primary", use_container_width=True):
@@ -455,7 +291,6 @@ with tab_map:
                         st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
             st.error(f"⚠️ 找不到資料，請確認輸入是否有誤。")
-
 
 # ==========================================
 # 分頁 3: TS2 STATUS
@@ -539,28 +374,6 @@ with tab_status:
     def set_ts2_status_search(num_str):
         st.session_state["status_active_ts2"] = num_str
 
-    def get_t3_state(row):
-        ft_val = str(row.get('FT', '無資料')).strip().upper()
-        if ft_val == "PASS": return "pass"
-        elif ft_val == "FAIL": return "fail"
-        else: return "empty"
-
-    ts2_status_states = {}
-    for idx, row in df_map.iterrows():
-        ts2_id = str(row['TS2#']).strip()
-        state = get_t3_state(row)
-        if ts2_id not in ts2_status_states:
-            ts2_status_states[ts2_id] = state
-        elif state == "pass" or (state == "fail" and ts2_status_states[ts2_id] == "empty"):
-            ts2_status_states[ts2_id] = state
-
-    ts2_notice_states = {}
-    for idx, row in df_note.iterrows():
-        ts2_id = str(row['NO.']).strip()
-        notice_val = str(row.get('NOTICE', '0')).strip()
-        if notice_val.endswith('.0'): notice_val = notice_val[:-2]
-        ts2_notice_states[ts2_id] = notice_val
-
     dynamic_custom_css_t3 = ""
     t3_pass_cnt, t3_fail_cnt, t3_empty_cnt, t3_notice_cnt = 0, 0, 0, 0
     active_status_ts2 = st.session_state.get("status_active_ts2", "")
@@ -588,19 +401,15 @@ with tab_status:
             
         if is_selected:
             dynamic_custom_css_t3 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{
-                border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important;
-            }}
+            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }}
             """
-            
     if dynamic_custom_css_t3: st.markdown(f"<style>{dynamic_custom_css_t3}</style>", unsafe_allow_html=True)
 
     panel_title_t3 = f"🎛️ TS2 STATUS 快速面板 (綠色: PASS({t3_pass_cnt}) / 黃色: FAIL({t3_fail_cnt}) / 紅色: NOTICE({t3_notice_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 框線放大: 目前選取)"
     
     with st.expander(panel_title_t3, expanded=True):
         st.markdown('<div class="t3-panel" style="display:none;"></div>', unsafe_allow_html=True)
-        if len(valid_ts2_list) == 0:
-            st.info("尚無 TS2 資料")
+        if len(valid_ts2_list) == 0: st.info("尚無 TS2 資料")
         else:
             cols = st.columns(len(valid_ts2_list))
             for idx, ts2_val in enumerate(valid_ts2_list):
@@ -613,7 +422,6 @@ with tab_status:
         if not match_df.empty:
             for idx, row in match_df.iterrows():
                 ts2_id = row['TS2#']
-                
                 note_row = df_note[df_note['NO.'] == str(ts2_id)]
                 val_note = note_row['NOTE'].values[0] if not note_row.empty else "無資料"
                 val_note_str = "" if pd.isna(val_note) or val_note == "無資料" else str(val_note)
@@ -646,9 +454,9 @@ with tab_status:
                         )
                         st.markdown("#### 🔍 站點狀態")
                         s1, s2, s3 = st.columns(3)
-                        new_jtag = s1.selectbox("JTAG", station_opts, index=get_station_idx(row.get('JTAG')), key=f"t3_edit_jtag_{ts2_id}")
-                        new_aot = s2.selectbox("AOT", station_opts, index=get_station_idx(row.get('AOT')), key=f"t3_edit_aot_{ts2_id}")
-                        new_ft = s3.selectbox("FT", station_opts, index=get_station_idx(row.get('FT')), key=f"t3_edit_ft_{ts2_id}")
+                        new_jtag = s1.selectbox("JTAG", station_opts_rca, index=get_station_idx(row.get('JTAG')), key=f"t3_edit_jtag_{ts2_id}")
+                        new_aot = s2.selectbox("AOT", station_opts_rca, index=get_station_idx(row.get('AOT')), key=f"t3_edit_aot_{ts2_id}")
+                        new_ft = s3.selectbox("FT", station_opts_rca, index=get_station_idx(row.get('FT')), key=f"t3_edit_ft_{ts2_id}")
 
                         st.divider()
                         st.markdown("#### 📋 附加資訊")
@@ -674,8 +482,6 @@ with tab_status:
                             else:
                                 with st.spinner("🔄 正在更新並上傳 Mapping 與 Note 檔案..."):
                                     try:
-                                        repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
-                                        
                                         idx_update = df_map[df_map['TS2#'] == ts2_id].index
                                         df_map.loc[idx_update, 'JTAG'] = new_jtag
                                         df_map.loc[idx_update, 'AOT'] = new_aot
@@ -699,7 +505,6 @@ with tab_status:
                                             df_note = pd.concat([df_note, new_row], ignore_index=True)
                                             
                                         save_df_to_github(df_note, "TS2_note.xlsx", "TS2_note.xlsx", f"Update TS2#{ts2_id} Note via Tab3")
-
                                         st.cache_data.clear()
                                         st.success("✅ 成功同步 Mapping 與 Note 資料至 GitHub！畫面即將重新載入...")
                                         time.sleep(1.5)
@@ -724,80 +529,160 @@ with tab_status:
                         st.markdown("**📝 詳細備註:**")
                         display_note = val_note_str if val_note_str else '無資料'
                         display_note = display_note.replace('\n', '  \n')
-                        if val_notice == '1':
-                            st.error(f"**{display_note}**")
-                        else:
-                            st.info(f"**{display_note}**")
+                        if val_notice == '1': st.error(f"**{display_note}**")
+                        else: st.info(f"**{display_note}**")
                             
                         render_handover_status(ts2_id, df_ho, is_editing=False)
         else:
             st.error(f"⚠️ 找不到該筆資料。")
 
-
 # ==========================================
 # 分頁 4: 追踨問題 (Work Items)
 # ==========================================
 with tab_work:
-    col_w_title, col_w_add = st.columns([0.8, 0.2])
+    def cb_update_work_status(item_id, new_status):
+        df_w = load_work_item_data().copy()
+        idx = df_w[df_w['事項編號'] == item_id].index
+        if not idx.empty:
+            df_w.loc[idx[0], '工作狀態'] = new_status
+            save_df_to_github(df_w, "Work_item.xlsx", "Work_item.xlsx", f"Update status {item_id}")
+            st.cache_data.clear()
+
+    def cb_delete_work_item(item_id):
+        df_w = load_work_item_data().copy()
+        df_w = df_w[df_w['事項編號'] != item_id]
+        save_df_to_github(df_w, "Work_item.xlsx", "Work_item.xlsx", f"Delete item {item_id}")
+        st.cache_data.clear()
+
+    def set_add_no(val):
+        st.session_state["w_add_no_input"] = val
+
+    col_w_title, col_w_upload, col_w_add = st.columns([0.4, 0.4, 0.2])
     with col_w_title:
         st.header("📋 追踨問題")
+        
+    with col_w_upload:
+        with st.expander("📤 上/下傳 Work_item", expanded=False):
+            try:
+                with open("Work_item.xlsx", "rb") as f:
+                    st.download_button(label="📥 下載目前檔", data=f, file_name="Work_item.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            except FileNotFoundError: pass
+                
+            st.divider()
+            uploaded_work = st.file_uploader("上傳 Work_item (.xlsx)", type=["xlsx"], key="upload_work")
+            if uploaded_work:
+                try:
+                    df_work_test = pd.read_excel(uploaded_work, dtype=str)
+                    if '事項編號' not in df_work_test.columns: st.warning("⚠️ 警告：找不到 '事項編號' 欄位，系統將自動補齊。")
+                    st.success(f"✅ 驗證通過！共讀取到 {len(df_work_test)} 筆資料。")
+                    if st.button("🚀 確認上傳並覆蓋", key="btn_upload_work", use_container_width=True, type="primary"):
+                        if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                            st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                        else:
+                            with st.spinner("🔄 上傳中..."):
+                                uploaded_work.seek(0)
+                                excel_bytes = uploaded_work.read()
+                                with open("Work_item.xlsx", "wb") as f: f.write(excel_bytes)
+                                repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+                                try:
+                                    contents = repo.get_contents("Work_item.xlsx")
+                                    repo.update_file(contents.path, "Update Work_item.xlsx via Streamlit Upload", excel_bytes, contents.sha)
+                                except Exception:
+                                    repo.create_file("Work_item.xlsx", "Upload Work_item.xlsx via Streamlit Upload", excel_bytes)
+                                st.cache_data.clear()
+                                st.success("✅ 檔案已成功更新！畫面即將重新載入...")
+                                time.sleep(1.5)
+                                st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 解析檔案失敗：{e}")
+                    
     with col_w_add:
         if st.button("➕ 新增事項", use_container_width=True, type="primary"):
             st.session_state["show_add_work"] = not st.session_state.get("show_add_work", False)
             
-    # 新增事項表單
+    # === 新增事項表單 ===
     if st.session_state.get("show_add_work", False):
         with st.container(border=True):
             st.subheader("🆕 新增追蹤事項")
-            with st.form("add_work_form"):
-                w_c1, w_c2, w_c3 = st.columns(3)
-                w_build = w_c1.text_input("BUILD (如 TS2)", value="TS2")
-                w_no = w_c2.text_input("NO. (系統編號)")
-                w_station = w_c3.text_input("Station (站別)")
-                
-                w_desc = st.text_input("事項描述")
-                
-                w_c4, w_c5 = st.columns(2)
-                w_date = w_c4.text_input("起始日期 (YYYY-MM-DD)", value=time.strftime("%Y-%m-%d"))
-                w_owner = w_c5.text_input("經手人員")
-                
-                col_submit, col_cancel = st.columns(2)
-                with col_submit:
-                    w_submitted = st.form_submit_button("💾 儲存並同步至 GitHub", type="primary", use_container_width=True)
-                with col_cancel:
-                    w_canceled = st.form_submit_button("❌ 取消", type="secondary", use_container_width=True)
+            
+            w_c1, w_c2, w_c3 = st.columns(3)
+            with w_c1:
+                build_opts = ["TS2", "TS1", "自訂 (請在下方輸入)"]
+                sel_build = st.selectbox("BUILD", build_opts, index=0)
+                if sel_build == "自訂 (請在下方輸入)": w_build = st.text_input("✍️ 請輸入自訂 BUILD", key="w_custom_build")
+                else: w_build = sel_build
                     
-                if w_canceled:
-                    st.session_state["show_add_work"] = False
-                    st.rerun()
+            with w_c2:
+                w_no = st.text_input("NO. (系統編號)", value=st.session_state.get("w_add_no_input", ""))
 
-                if w_submitted:
-                    if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                        st.error("❌ 尚未設定 GitHub Token 或 Repo！")
-                    else:
-                        with st.spinner("🔄 上傳中..."):
-                            new_id = get_next_work_id(df_work)
-                            new_row = pd.DataFrame([{
-                                '事項編號': new_id,
-                                '工作狀態': 'Ongoing',
-                                'BUILD': w_build.strip(),
-                                'NO.': w_no.strip(),
-                                '事項描述': w_desc.strip(),
-                                '回報狀況': "", 
-                                '起始日期': w_date.strip(),
-                                '經手人員': w_owner.strip(),
-                                'Station': w_station.strip()
-                            }])
-                            df_work = pd.concat([df_work, new_row], ignore_index=True)
-                            
-                            df_work_upload = df_work.copy()
-                            save_df_to_github(df_work_upload, "Work_item.xlsx", "Work_item.xlsx", f"Add new work item {new_id} via Streamlit")
-                            
-                            st.session_state["show_add_work"] = False
-                            st.cache_data.clear()
-                            st.success(f"✅ 已新增事項！畫面即將重新載入...")
-                            time.sleep(1.5)
-                            st.rerun()
+            with w_c3:
+                station_opts = ["MGMT_JTAG", "MGMT_FT", "AOT", "SYSTEM_FT", "OTHER", "自訂 (請在下方輸入)"]
+                sel_station = st.selectbox("Station", station_opts, index=2)
+                if sel_station in ["OTHER", "自訂 (請在下方輸入)"]: w_station = st.text_input("✍️ 請輸入自訂 Station", key="w_custom_station")
+                else: w_station = sel_station
+                    
+            # --- 針對分頁 4 動態產生跟分頁 3 完全一樣的顏色邏輯 CSS (.t4-panel) ---
+            dynamic_custom_css_t4 = ""
+            active_w_add_no = st.session_state.get("w_add_no_input", "")
+            for idx, ts2_val in enumerate(valid_ts2_list):
+                state = ts2_status_states.get(ts2_val, "empty")
+                has_notice = (ts2_notice_states.get(ts2_val) == '1')
+                is_selected = (ts2_val == active_w_add_no)
+                
+                if has_notice:
+                    dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }} div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}"""
+                elif state == "fail":
+                    dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }} div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}"""
+                    
+                if is_selected:
+                    dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }}"""
+            if dynamic_custom_css_t4: st.markdown(f"<style>{dynamic_custom_css_t4}</style>", unsafe_allow_html=True)
+
+            with st.expander("🎛️ 點擊展開 NO. 快速選擇面板", expanded=False):
+                st.markdown('<div class="t4-panel" style="display:none;"></div>', unsafe_allow_html=True)
+                if len(valid_ts2_list) == 0: st.info("尚無資料")
+                else:
+                    btn_cols = st.columns(len(valid_ts2_list))
+                    for idx, ts2_val in enumerate(valid_ts2_list):
+                        # 套用與 Tab3 一樣的 Button Type (Pass為綠，其它交由CSS上色)
+                        state = ts2_status_states.get(ts2_val, "empty")
+                        btn_type = "primary" if state == "pass" else "secondary"
+                        btn_cols[idx].button(str(ts2_val), key=f"btn_w_add_{ts2_val}", on_click=set_add_no, args=(str(ts2_val),), type=btn_type)
+
+            # 其餘欄位
+            w_desc = st.text_input("事項描述")
+            w_c4, w_c5 = st.columns(2)
+            w_date = w_c4.text_input("起始日期 (YYYY-MM-DD)", value=time.strftime("%Y-%m-%d"))
+            w_owner = w_c5.text_input("經手人員")
+            
+            st.write("")
+            col_submit, col_cancel = st.columns(2)
+            with col_submit: w_submitted = st.button("💾 儲存並同步至 GitHub", type="primary", use_container_width=True)
+            with col_cancel: w_canceled = st.button("❌ 取消", type="secondary", use_container_width=True)
+                
+            if w_canceled:
+                st.session_state["show_add_work"] = False
+                st.rerun()
+
+            if w_submitted:
+                if not w_no.strip(): st.error("⚠️ 請填寫或選擇 NO. (系統編號)！")
+                elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets: st.error("❌ 尚未設定 GitHub Token 或 Repo！")
+                else:
+                    with st.spinner("🔄 上傳中..."):
+                        new_id = get_next_work_id(df_work)
+                        new_row = pd.DataFrame([{
+                            '事項編號': new_id, '工作狀態': 'Ongoing', 'BUILD': w_build.strip(),
+                            'NO.': w_no.strip(), '事項描述': w_desc.strip(), '回報狀況': "", 
+                            '起始日期': w_date.strip(), '經手人員': w_owner.strip(), 'Station': w_station.strip()
+                        }])
+                        df_work = pd.concat([df_work, new_row], ignore_index=True)
+                        save_df_to_github(df_work.copy(), "Work_item.xlsx", "Work_item.xlsx", f"Add new work item {new_id} via Streamlit")
+                        st.session_state["show_add_work"] = False
+                        st.session_state["w_add_no_input"] = "" 
+                        st.cache_data.clear()
+                        st.success(f"✅ 已成功新增事項！畫面即將重新載入...")
+                        time.sleep(1.5)
+                        st.rerun()
 
     st.divider()
 
@@ -808,8 +693,7 @@ with tab_work:
     # 🔥 目前追蹤 (Ongoing) 區塊
     # ---------------------------
     st.subheader(f"🔥 目前追蹤 ({len(df_ongoing)})")
-    if df_ongoing.empty:
-        st.info("目前無待處理項目")
+    if df_ongoing.empty: st.info("目前無待處理項目")
         
     for idx, row in df_ongoing.iterrows():
         item_id = row.get('事項編號', f"W-XXX")
@@ -817,91 +701,56 @@ with tab_work:
         no_val = row.get('NO.', '無')
         station_val = row.get('Station', '無資料')
         desc_val = row.get('事項描述', '無標題')
-        
-        # 依照您的需求完全客製化標題樣式
-        display_title = f":blue-background[ ** {build_val}#{no_val} ** ] [ {station_val} ] **{desc_val}**"
+        date_val = str(row.get('起始日期', '')).strip()
+        date_tag = f" :gray-background[ {date_val} ]" if date_val and date_val != "無資料" else ""
+        display_title = f":orange-background[ {build_val}#{no_val} ] :blue-background[ {station_val} ] {desc_val}{date_tag}"
         
         with st.expander(display_title, expanded=False):
-            # 以 item_id 作為 key，確保 UI 狀態不受排序影響
             is_w_edit = st.toggle("✏️ 進入編輯模式", key=f"w_toggle_{item_id}")
-            
             st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：{desc_val}</div>", unsafe_allow_html=True)
-            
             cross_ref_no = str(row.get('NO.', '')).strip()
             match_df = df_map[df_map['TS2#'] == cross_ref_no]
             
             if not match_df.empty:
                 m_row = match_df.iloc[0]
-                
-                st.markdown(
-                    f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`  \n"
-                    f"**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`  \n"
-                    f"**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`"
-                )
-                st.markdown(
-                    f"**JTAG**: `{m_row.get('JTAG', '無資料')}` ｜ "
-                    f"**AOT**: `{m_row.get('AOT', '無資料')}` ｜ "
-                    f"**FT**: `{m_row.get('FT', '無資料')}`"
-                )
+                st.markdown(f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`  \n**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`  \n**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`")
+                st.markdown(f"**JTAG**: `{m_row.get('JTAG', '無資料')}` ｜ **AOT**: `{m_row.get('AOT', '無資料')}` ｜ **FT**: `{m_row.get('FT', '無資料')}`")
                 st.divider()
             
             if is_w_edit:
                 e_build = st.text_input("BUILD", value=row.get('BUILD', ''), key=f"e_build_{item_id}")
                 e_no = st.text_input("NO.", value=row.get('NO.', ''), key=f"e_no_{item_id}")
                 e_station = st.text_input("Station", value=row.get('Station', ''), key=f"e_station_{item_id}")
-                e_desc = st.text_input("事項描述", value=row.get('事項描述', ''), key=f"e_desc_{item_id}") # 事項描述可於此重新修改
+                e_desc = st.text_input("事項描述", value=row.get('事項描述', ''), key=f"e_desc_{item_id}") 
                 e_report = st.text_area("回報狀況", value=row.get('回報狀況', ''), key=f"e_report_{item_id}")
                 e_date = st.text_input("起始日期", value=row.get('起始日期', ''), key=f"e_date_{item_id}")
                 e_owner = st.text_input("經手人員", value=row.get('經手人員', ''), key=f"e_owner_{item_id}")
                 
                 st.write("")
-                col_save, col_resolve = st.columns(2)
-                with col_save:
-                    if st.button("💾 儲存修改", key=f"w_save_{item_id}", type="primary", use_container_width=True):
-                        with st.spinner("🔄 更新中..."):
-                            target_idx = df_work[df_work['事項編號'] == item_id].index[0]
-                            df_work.loc[target_idx, 'BUILD'] = e_build
-                            df_work.loc[target_idx, 'NO.'] = e_no
-                            df_work.loc[target_idx, 'Station'] = e_station
-                            df_work.loc[target_idx, '事項描述'] = e_desc
-                            df_work.loc[target_idx, '回報狀況'] = e_report
-                            df_work.loc[target_idx, '起始日期'] = e_date
-                            df_work.loc[target_idx, '經手人員'] = e_owner
-                            
-                            save_df_to_github(df_work, "Work_item.xlsx", "Work_item.xlsx", f"Update work item {item_id}")
-                            st.cache_data.clear()
-                            st.success("✅ 已儲存")
-                            time.sleep(1)
-                            st.rerun()
-                            
-                with col_resolve:
-                    if st.button("✅ 標記為已解決", key=f"w_resolve_{item_id}", type="secondary", use_container_width=True):
-                        with st.spinner("🔄 移動中..."):
-                            target_idx = df_work[df_work['事項編號'] == item_id].index[0]
-                            df_work.loc[target_idx, '工作狀態'] = 'Resolved'
-                            save_df_to_github(df_work, "Work_item.xlsx", "Work_item.xlsx", f"Resolve work item {item_id}")
-                            st.cache_data.clear()
-                            st.success("✅ 已標記解決")
-                            time.sleep(1)
-                            st.rerun()
+                if st.button("💾 儲存修改", key=f"w_save_{item_id}", type="primary", use_container_width=True):
+                    with st.spinner("🔄 更新中..."):
+                        target_idx = df_work[df_work['事項編號'] == item_id].index[0]
+                        df_work.loc[target_idx, 'BUILD'] = e_build
+                        df_work.loc[target_idx, 'NO.'] = e_no
+                        df_work.loc[target_idx, 'Station'] = e_station
+                        df_work.loc[target_idx, '事項描述'] = e_desc
+                        df_work.loc[target_idx, '回報狀況'] = e_report
+                        df_work.loc[target_idx, '起始日期'] = e_date
+                        df_work.loc[target_idx, '經手人員'] = e_owner
+                        save_df_to_github(df_work, "Work_item.xlsx", "Work_item.xlsx", f"Update work item {item_id}")
+                        st.cache_data.clear()
+                        st.success("✅ 已儲存")
+                        time.sleep(1)
+                        st.rerun()
             else:
-                st.markdown(
-                    f"🔹 **機台** : {row.get('BUILD', '')}#{row.get('NO.', '')}  \n"
-                    f"🔹 **起始日期** : {row.get('起始日期', '')}  \n"
-                    f"🔹 **經手人員** : {row.get('經手人員', '')}"
-                )
+                st.markdown(f"🔹 **機台** : {row.get('BUILD', '')}#{row.get('NO.', '')}  \n🔹 **經手人員** : {row.get('經手人員', '')}")
                 report_text = str(row.get('回報狀況', '')).replace('\n', '  \n')
                 st.markdown(f"🔹 **回報狀況** :  \n{report_text}")
                 
                 st.write("")
-                if st.button("✅ 直接標記已解決", key=f"w_quick_resolve_{item_id}", type="secondary", use_container_width=True):
-                    with st.spinner("🔄 移動中..."):
-                        target_idx = df_work[df_work['事項編號'] == item_id].index[0]
-                        df_work.loc[target_idx, '工作狀態'] = 'Resolved'
-                        save_df_to_github(df_work, "Work_item.xlsx", "Work_item.xlsx", f"Resolve work item {item_id}")
-                        st.cache_data.clear()
-                        time.sleep(1)
-                        st.rerun()
+                col_resolve, col_delete = st.columns(2)
+                with col_resolve: st.button("✅ 直接標記已解決", key=f"w_quick_resolve_{item_id}", use_container_width=True, on_click=cb_update_work_status, args=(item_id, 'Resolved'))
+                with col_delete: st.button("🗑️ 刪除此事項", key=f"w_del_{item_id}", use_container_width=True, on_click=cb_delete_work_item, args=(item_id,))
 
     st.write("")
     st.write("")
@@ -911,8 +760,7 @@ with tab_work:
     # ✅ 已解決 (Resolved) 區塊
     # ---------------------------
     st.subheader(f"✅ 已解決 ({len(df_resolved)})")
-    if df_resolved.empty:
-        st.info("目前無已解決項目")
+    if df_resolved.empty: st.info("目前無已解決項目")
         
     for idx, row in df_resolved.iterrows():
         item_id = row.get('事項編號', f"W-XXX")
@@ -920,76 +768,26 @@ with tab_work:
         no_val = row.get('NO.', '無')
         station_val = row.get('Station', '無資料')
         desc_val = row.get('事項描述', '無標題')
-        
-        display_title = f":blue-background[ ** {build_val}#{no_val} ** ] [ {station_val} ] **{desc_val}**"
+        date_val = str(row.get('起始日期', '')).strip()
+        date_tag = f" :gray-background[ {date_val} ]" if date_val and date_val != "無資料" else ""
+        display_title = f":orange-background[ {build_val}#{no_val} ] :blue-background[ {station_val} ] {desc_val}{date_tag}"
         
         with st.expander(display_title, expanded=False):
-            is_w_edit = st.toggle("✏️ 進入編輯模式", key=f"w_toggle_{item_id}")
-            
             st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：{desc_val}</div>", unsafe_allow_html=True)
-            
             cross_ref_no = str(row.get('NO.', '')).strip()
             match_df = df_map[df_map['TS2#'] == cross_ref_no]
             
             if not match_df.empty:
                 m_row = match_df.iloc[0]
-                
-                st.markdown(
-                    f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`  \n"
-                    f"**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`  \n"
-                    f"**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`"
-                )
-                st.markdown(
-                    f"**JTAG**: `{m_row.get('JTAG', '無資料')}` ｜ "
-                    f"**AOT**: `{m_row.get('AOT', '無資料')}` ｜ "
-                    f"**FT**: `{m_row.get('FT', '無資料')}`"
-                )
+                st.markdown(f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`  \n**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`  \n**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`")
+                st.markdown(f"**JTAG**: `{m_row.get('JTAG', '無資料')}` ｜ **AOT**: `{m_row.get('AOT', '無資料')}` ｜ **FT**: `{m_row.get('FT', '無資料')}`")
                 st.divider()
             
-            if is_w_edit:
-                e_build = st.text_input("BUILD", value=row.get('BUILD', ''), key=f"e_build_{item_id}")
-                e_no = st.text_input("NO.", value=row.get('NO.', ''), key=f"e_no_{item_id}")
-                e_station = st.text_input("Station", value=row.get('Station', ''), key=f"e_station_{item_id}")
-                e_desc = st.text_input("事項描述", value=row.get('事項描述', ''), key=f"e_desc_{item_id}") # 事項描述可於此重新修改
-                e_report = st.text_area("回報狀況", value=row.get('回報狀況', ''), key=f"e_report_{item_id}")
-                e_date = st.text_input("起始日期", value=row.get('起始日期', ''), key=f"e_date_{item_id}")
-                e_owner = st.text_input("經手人員", value=row.get('經手人員', ''), key=f"e_owner_{item_id}")
-                
-                st.write("")
-                col_save, col_reopen = st.columns(2)
-                with col_save:
-                    if st.button("💾 儲存修改", key=f"w_save_{item_id}", type="primary", use_container_width=True):
-                        with st.spinner("🔄 更新中..."):
-                            target_idx = df_work[df_work['事項編號'] == item_id].index[0]
-                            df_work.loc[target_idx, 'BUILD'] = e_build
-                            df_work.loc[target_idx, 'NO.'] = e_no
-                            df_work.loc[target_idx, 'Station'] = e_station
-                            df_work.loc[target_idx, '事項描述'] = e_desc
-                            df_work.loc[target_idx, '回報狀況'] = e_report
-                            df_work.loc[target_idx, '起始日期'] = e_date
-                            df_work.loc[target_idx, '經手人員'] = e_owner
-                            
-                            save_df_to_github(df_work, "Work_item.xlsx", "Work_item.xlsx", f"Update work item {item_id}")
-                            st.cache_data.clear()
-                            st.success("✅ 已儲存")
-                            time.sleep(1)
-                            st.rerun()
-                            
-                with col_reopen:
-                    if st.button("🔄 重新開啟追蹤", key=f"w_reopen_{item_id}", type="secondary", use_container_width=True):
-                        with st.spinner("🔄 移動中..."):
-                            target_idx = df_work[df_work['事項編號'] == item_id].index[0]
-                            df_work.loc[target_idx, '工作狀態'] = 'Ongoing'
-                            save_df_to_github(df_work, "Work_item.xlsx", "Work_item.xlsx", f"Reopen work item {item_id}")
-                            st.cache_data.clear()
-                            st.success("✅ 已移回追蹤清單")
-                            time.sleep(1)
-                            st.rerun()
-            else:
-                st.markdown(
-                    f"🔹 **機台** : {row.get('BUILD', '')}#{row.get('NO.', '')}  \n"
-                    f"🔹 **起始日期** : {row.get('起始日期', '')}  \n"
-                    f"🔹 **經手人員** : {row.get('經手人員', '')}"
-                )
-                report_text = str(row.get('回報狀況', '')).replace('\n', '  \n')
-                st.markdown(f"🔹 **回報狀況** :  \n{report_text}")
+            st.markdown(f"🔹 **機台** : {row.get('BUILD', '')}#{row.get('NO.', '')}  \n🔹 **經手人員** : {row.get('經手人員', '')}")
+            report_text = str(row.get('回報狀況', '')).replace('\n', '  \n')
+            st.markdown(f"🔹 **回報狀況** :  \n{report_text}")
+            
+            st.write("")
+            col_reopen, col_del = st.columns(2)
+            with col_reopen: st.button("🔄 恢復追蹤", key=f"w_reopen_{item_id}", type="secondary", use_container_width=True, on_click=cb_update_work_status, args=(item_id, 'Ongoing'))
+            with col_del: st.button("🗑️ 刪除此事項", key=f"w_resolved_del_{item_id}", type="primary", use_container_width=True, on_click=cb_delete_work_item, args=(item_id,))
