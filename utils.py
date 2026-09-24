@@ -153,10 +153,17 @@ def get_station_idx(val):
     return 0
 
 def save_df_to_github(df, filename, repo_path, commit_message):
+    # 🌟 關鍵修正：上傳 GitHub 之前，先強制存一份最新的到本地端
+    try:
+        df.to_excel(filename, index=False)
+    except Exception:
+        pass # 防呆機制：防止您剛好在電腦上開著該 Excel 檔導致存檔被鎖定報錯
+
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
     excel_data = output.getvalue()
+    
     repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
     try:
         contents = repo.get_contents(repo_path)
