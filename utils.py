@@ -14,41 +14,16 @@ def get_custom_css():
     button[kind="tertiary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
     button[data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; }
 
-    /* =========================================================
-       🔥 完美還原原生 Tabs 換行 (100%符合截圖需求)
-       ========================================================= */
-    /* 1. 允許分頁標籤換行 */
-    div[data-baseweb="tab-list"] {
-        flex-wrap: wrap !important;
-        gap: 0px !important;
-    }
-    
-    /* 2. 利用 flex 的 order 屬性重新排列順序 */
+    /* 完美還原原生 Tabs 換行 */
+    div[data-baseweb="tab-list"] { flex-wrap: wrap !important; gap: 0px !important; }
     button[data-baseweb="tab"]:nth-child(1) { order: 1 !important; }
     button[data-baseweb="tab"]:nth-child(2) { order: 2 !important; }
     button[data-baseweb="tab"]:nth-child(3) { order: 3 !important; }
-    
-    /* 3. ✨ 換行魔法：在第 3 和第 4 個標籤之間，安插一個 100% 寬度的隱形方塊，強制擠出下一行 */
-    div[data-baseweb="tab-list"]::before {
-        content: "" !important;
-        flex-basis: 100% !important;
-        order: 4 !important;
-        height: 10px !important; /* 這是兩行之間的完美間距 */
-    }
-    
-    /* 4. 第 4 個標籤順理成章掉到下一行的最左邊 */
-    button[data-baseweb="tab"]:nth-child(4) { 
-        order: 5 !important; 
-    }
-    
-    /* 5. 確保原生紅色/藍色動畫底線的順序不受影響 */
-    div[data-baseweb="tab-highlight"] { 
-        order: 99 !important; 
-    }
+    div[data-baseweb="tab-list"]::before { content: "" !important; flex-basis: 100% !important; order: 4 !important; height: 10px !important; }
+    button[data-baseweb="tab"]:nth-child(4) { order: 5 !important; }
+    div[data-baseweb="tab-highlight"] { order: 99 !important; }
 
-    /* =========================================================
-       網格面板與其他樣式修正 
-       ========================================================= */
+    /* 網格面板與其他樣式修正 */
     div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"],
     div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"],
     div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] {
@@ -76,7 +51,7 @@ def get_custom_css():
     }
     div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
 
-    /* 🔥 客製化追蹤問題 (Expander) 標題內的色塊顏色 🔥 */
+    /* 客製化追蹤問題 (Expander) 標題內的色塊顏色 */
     div[data-testid="stExpander"] summary p span:nth-of-type(1) { background-color: #ffc107 !important; color: #000000 !important; border-radius: 4px !important; padding: 2px 8px !important; font-weight: bold !important; }
     div[data-testid="stExpander"] summary p span:nth-of-type(2) { background-color: #dbeafe !important; color: #1e3a8a !important; border-radius: 4px !important; padding: 2px 8px !important; }
     div[data-testid="stExpander"] summary p span:nth-of-type(3) { background-color: #f1f3f5 !important; color: #6c757d !important; border-radius: 4px !important; padding: 2px 8px !important; font-size: 0.85em !important; margin-left: 6px !important; }
@@ -85,17 +60,27 @@ def get_custom_css():
 
 @st.cache_data(ttl=60)
 def load_rca_data():
-    df = pd.read_excel("RCA.xlsx", dtype=str)
-    df.fillna("無資料", inplace=True)
-    return df
+    try:
+        df = pd.read_excel("RCA.xlsx", dtype=str)
+        df.fillna("無資料", inplace=True)
+        return df
+    except FileNotFoundError:
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
-def load_mapping_data():
-    df = pd.read_excel("TS2_mapping.xlsx", dtype=str)
+def load_mapping_data(build_name):
+    filename = f"{build_name}_mapping.xlsx"
+    empty_df = pd.DataFrame(columns=["SYS#", "CSM BASE", "CSM TRAY", "FULL SYS", "JTAG", "AOT", "FT", "STATUS", "OWNER", "Failure BIN"])
+    
+    try:
+        df = pd.read_excel(filename, dtype=str)
+    except FileNotFoundError:
+        return empty_df
+
     rename_dict = {}
     for col in df.columns:
         col_upper = str(col).upper()
-        if "NO." in col_upper or "TS2#" in col_upper: rename_dict[col] = "NO."
+        if "NO." in col_upper or f"{build_name}#" in col_upper or "TS2#" in col_upper or "TS3#" in col_upper: rename_dict[col] = "NO."
         elif "CSM BASE" in col_upper or "CSM_BASE" in col_upper: rename_dict[col] = "CSM BASE"
         elif "CSM TRAY" in col_upper or "CSM_TRAY" in col_upper: rename_dict[col] = "CSM TRAY"
         elif "FULL SYS" in col_upper or "FULL_SYS" in col_upper: rename_dict[col] = "FULL SYS"
@@ -108,20 +93,24 @@ def load_mapping_data():
             
     df.rename(columns=rename_dict, inplace=True)
     if 'NO.' not in df.columns:
-        st.error("Excel 中找不到包含 'NO.' 的欄位，請檢查檔案標題列是否有誤。")
-        st.stop()
+        return empty_df # 格式錯誤時回傳空框架，避免 Crash
         
     df['NO.'] = df['NO.'].ffill()
     df = df.dropna(subset=['NO.'])
     df = df.groupby('NO.', as_index=False).first()
     df["NO."] = df["NO."].astype(str).str.replace(r'\.0$', '', regex=True)
-    df.rename(columns={"NO.": "TS2#"}, inplace=True) 
+    df.rename(columns={"NO.": "SYS#"}, inplace=True) 
     df.fillna("無資料", inplace=True)
     return df
 
 @st.cache_data(ttl=60)
-def load_note_data():
-    df = pd.read_excel("TS2_note.xlsx", dtype=str)
+def load_note_data(build_name):
+    filename = f"{build_name}_note.xlsx"
+    try:
+        df = pd.read_excel(filename, dtype=str)
+    except FileNotFoundError:
+        return pd.DataFrame(columns=["NO.", "NOTE", "NOTICE", "BUILD"])
+        
     if 'NO.' in df.columns:
         df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
     if 'NOTICE' not in df.columns:
@@ -131,12 +120,15 @@ def load_note_data():
 
 @st.cache_data(ttl=60)
 def load_handover_data():
-    df = pd.read_excel("Chameleon handover status.xlsx", dtype=str)
-    if 'System' in df.columns and 'Failure Description' in df.columns:
-        df_ho = df[['System', 'Failure Description']].dropna(subset=['System'])
-        df_ho['System'] = df_ho['System'].astype(str).str.strip()
-        df_ho['Failure Description'] = df_ho['Failure Description'].fillna("無資料")
-        return df_ho
+    try:
+        df = pd.read_excel("Chameleon handover status.xlsx", dtype=str)
+        if 'System' in df.columns and 'Failure Description' in df.columns:
+            df_ho = df[['System', 'Failure Description']].dropna(subset=['System'])
+            df_ho['System'] = df_ho['System'].astype(str).str.strip()
+            df_ho['Failure Description'] = df_ho['Failure Description'].fillna("無資料")
+            return df_ho
+    except FileNotFoundError:
+        pass
     return pd.DataFrame(columns=['System', 'Failure Description'])
 
 @st.cache_data(ttl=60)
@@ -160,9 +152,10 @@ def get_next_work_id(df):
     if ids.empty: return "W-001"
     return f"W-{ids.max() + 1:03d}"
 
-def render_handover_status(ts2_id, df_ho, is_editing=False):
-    pattern = f"^TS2.*#\\s*{ts2_id}(?:[^0-9]|$)"
-    matched_ho = df_ho[df_ho['System'].str.match(pattern, na=False)]
+def render_handover_status(sys_id, build_name, df_ho, is_editing=False):
+    # 動態正則表達式，例如： "^TS3.*#\s*5"
+    pattern = f"^{build_name}.*#\\s*{sys_id}(?:[^0-9]|$)"
+    matched_ho = df_ho[df_ho['System'].str.match(pattern, na=False, case=False)]
     if is_editing: st.markdown("#### 🔄 日夜交接狀態 (唯讀)")
     else: st.markdown("**🔄 日夜交接狀態 (唯讀):**")
     if matched_ho.empty: st.caption("（無相關交接紀錄）")
@@ -173,9 +166,10 @@ def render_handover_status(ts2_id, df_ho, is_editing=False):
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
 
-def get_valid_ts2_list(df_map):
+def get_valid_sys_list(df_map):
+    if df_map.empty: return []
     valid_set = set()
-    for v in df_map["TS2#"].dropna().astype(str):
+    for v in df_map["SYS#"].dropna().astype(str):
         if v.strip() and v.strip() != "無資料" and v.strip().lower() != "nan": valid_set.add(v.strip())
     return sorted(list(valid_set), key=natural_sort_key)
 
@@ -204,7 +198,7 @@ def save_df_to_github(df, filename, repo_path, commit_message):
     except Exception:
         repo.create_file(repo_path, commit_message, excel_data)
 
-def get_ts2_states(df_map, df_note):
+def get_sys_states(df_map, df_note):
     def get_t3_state(row):
         ft_val = str(row.get('FT', '無資料')).strip().upper()
         if ft_val == "PASS": return "pass"
@@ -212,17 +206,19 @@ def get_ts2_states(df_map, df_note):
         return "empty"
 
     status_states = {}
-    for _, row in df_map.iterrows():
-        ts2_id = str(row['TS2#']).strip()
-        state = get_t3_state(row)
-        if ts2_id not in status_states or state == "pass" or (state == "fail" and status_states[ts2_id] == "empty"):
-            status_states[ts2_id] = state
+    if not df_map.empty:
+        for _, row in df_map.iterrows():
+            sys_id = str(row['SYS#']).strip()
+            state = get_t3_state(row)
+            if sys_id not in status_states or state == "pass" or (state == "fail" and status_states[sys_id] == "empty"):
+                status_states[sys_id] = state
 
     notice_states = {}
-    for _, row in df_note.iterrows():
-        ts2_id = str(row['NO.']).strip()
-        n_val = str(row.get('NOTICE', '0')).strip()
-        if n_val.endswith('.0'): n_val = n_val[:-2]
-        notice_states[ts2_id] = n_val
+    if not df_note.empty:
+        for _, row in df_note.iterrows():
+            sys_id = str(row['NO.']).strip()
+            n_val = str(row.get('NOTICE', '0')).strip()
+            if n_val.endswith('.0'): n_val = n_val[:-2]
+            notice_states[sys_id] = n_val
 
     return status_states, notice_states
