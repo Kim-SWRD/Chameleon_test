@@ -189,10 +189,15 @@ with tab_rca:
 
         if not filtered_df.empty and selected_sub_bin:
             st.divider() 
-            st.markdown(f"**🏷️ BIN_CODE:** {display_bin_code}")
-            st.markdown(f"**🏷️ BIN 全文:**  \n{display_bin}")
+            
+            # 將這裡改為 st.code，這樣就有自帶的複製按鈕了！
+            st.markdown("**🏷️ BIN_CODE:**")
+            st.code(display_bin_code, language="plaintext")
+            st.markdown("**🏷️ BIN 全文:**")
+            st.code(display_bin, language="plaintext")
             if selected_sub_bin != "無資料":
-                st.markdown(f"**🏷️ SUB_BIN 全文:**  \n{selected_sub_bin}")
+                st.markdown("**🏷️ SUB_BIN 全文:**")
+                st.code(selected_sub_bin, language="plaintext")
             
             final_df = filtered_df[filtered_df["SUB_BIN"] == selected_sub_bin]
             st.markdown(f"### 💡 找到 {len(final_df)} 筆解決方案")
@@ -201,7 +206,7 @@ with tab_rca:
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.8, 0.2], vertical_alignment="center")
                     with c_title: st.markdown(f"#### 📝 紀錄索引號：#{index}")
-                    with c_toggle: is_rca_editing = st.toggle("✏️ 進入編輯", key=f"rca_edit_tog_{index}")
+                    with c_toggle: is_rca_editing = st.toggle("✏️️ 進入編輯", key=f"rca_edit_tog_{index}")
                     
                     cause_text = str(row['Possible Cause']).replace('\\n', '\n')
                     solution_text = str(row['Solution']).replace('\\n', '\n')
@@ -209,6 +214,17 @@ with tab_rca:
                     rev_text = str(row['REV'])
                     
                     if is_rca_editing:
+                        # 開放修改 STATION, BIN_CODE, BIN, SUB_BIN
+                        st.markdown("##### 🏷️ 編輯分類標籤")
+                        c_st, c_bc = st.columns(2)
+                        e_station = c_st.text_input("STATION", value=row.get('STATION', ''), key=f"e_rca_st_{index}")
+                        e_bincode = c_bc.text_input("BIN_CODE", value=row.get('BIN_CODE', ''), key=f"e_rca_bc_{index}")
+                        
+                        c_bin, c_sub = st.columns(2)
+                        e_bin = c_bin.text_input("BIN", value=row.get('BIN', ''), key=f"e_rca_b_{index}")
+                        e_subbin = c_sub.text_input("SUB_BIN", value=row.get('SUB_BIN', ''), key=f"e_rca_sb_{index}")
+                        
+                        st.markdown("##### 📝 編輯對策內容")
                         e_cause = st.text_area("🚨 可能原因 (Cause)", value=cause_text, key=f"e_rca_c_{index}")
                         e_sol = st.text_area("✅ 解決方案 (Solution)", value=solution_text, key=f"e_rca_s_{index}")
                         
@@ -224,6 +240,10 @@ with tab_rca:
                                     st.error("❌ 尚未設定系統同步憑證或 Repo！")
                                 else:
                                     with st.spinner("🔄 更新中..."):
+                                        df_rca.loc[index, 'STATION'] = e_station.strip() or "無資料"
+                                        df_rca.loc[index, 'BIN_CODE'] = e_bincode.strip() or "無資料"
+                                        df_rca.loc[index, 'BIN'] = e_bin.strip() or "無資料"
+                                        df_rca.loc[index, 'SUB_BIN'] = e_subbin.strip() or "無資料"
                                         df_rca.loc[index, 'Possible Cause'] = e_cause.strip() or "無資料"
                                         df_rca.loc[index, 'Solution'] = e_sol.strip() or "無資料"
                                         df_rca.loc[index, 'Ref Log'] = e_log.strip() or "無資料"
@@ -247,11 +267,9 @@ with tab_rca:
                                         time.sleep(1.5)
                                         st.rerun()
                     else:
-                        # 將純文字的換行符號轉為 Markdown 支援的換行 (行尾加上兩個空白)
                         display_cause = cause_text.replace('\n', '  \n')
                         display_sol = solution_text.replace('\n', '  \n')
                         
-                        # 改用 st.error 與 st.success，保證手機上完美自動換行
                         st.error(f"**🚨 可能原因 (Cause):**  \n{display_cause}")
                         st.success(f"**✅ 解決方案 (Solution):**  \n{display_sol}")
                         
@@ -819,7 +837,7 @@ with tab_work:
                     dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }}"""
             if dynamic_custom_css_t4: st.markdown(f"<style>{dynamic_custom_css_t4}</style>", unsafe_allow_html=True)
 
-            with st.expander("🎛️️ 點擊展開 NO. 快速選擇面板", expanded=False):
+            with st.expander("🎛️ 點擊展開 NO. 快速選擇面板", expanded=False):
                 st.markdown('<div class="t4-panel" style="display:none;"></div>', unsafe_allow_html=True)
                 if len(valid_sys_list) == 0: st.info(f"📂 尚無 {current_build} 資料")
                 else:
@@ -932,7 +950,7 @@ with tab_work:
                 st.write("")
                 col_resolve, col_delete = st.columns(2)
                 with col_resolve: st.button("✅ 直接標記已解決", key=f"w_quick_resolve_{item_id}", use_container_width=True, on_click=cb_update_work_status, args=(item_id, 'Resolved'))
-                with col_delete: st.button("🗑️ 刪除此事項", key=f"w_del_{item_id}", use_container_width=True, on_click=cb_delete_work_item, args=(item_id,))
+                with col_delete: st.button("🗑️️ 刪除此事項", key=f"w_del_{item_id}", use_container_width=True, on_click=cb_delete_work_item, args=(item_id,))
 
     st.write("")
     st.write("")
