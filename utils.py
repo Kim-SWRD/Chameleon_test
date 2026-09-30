@@ -49,15 +49,9 @@ def get_custom_css():
     div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] button p { 
         font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; 
     }
-    
-    /* 確保 Code Block 右上角的複製按鈕隨時顯示，並強制換行 */
+
+    /* 確保 Code Block 右上角的複製按鈕隨時顯示 (保留給短 SN 序號使用) */
     div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
-    div[data-testid="stCodeBlock"] pre {
-        white-space: pre-wrap !important;
-        word-wrap: break-word !important;
-        word-break: break-all !important;
-        overflow-x: hidden !important;
-    }
 
     /* 客製化追蹤問題 (Expander) 標題內的色塊顏色 */
     div[data-testid="stExpander"] summary p span:nth-of-type(1) { background-color: #ffc107 !important; color: #000000 !important; border-radius: 4px !important; padding: 2px 8px !important; font-weight: bold !important; }
@@ -79,6 +73,7 @@ def load_rca_data():
 def load_mapping_data(build_name):
     filename = f"{build_name}_mapping.xlsx"
     empty_df = pd.DataFrame(columns=["SYS#", "CSM BASE", "CSM TRAY", "FULL SYS", "JTAG", "AOT", "FT", "STATUS", "OWNER", "Failure BIN"])
+    
     try: df = pd.read_excel(filename, dtype=str)
     except FileNotFoundError: return empty_df
 
@@ -161,7 +156,9 @@ def render_handover_status(sys_id, build_name, df_ho, is_editing=False):
     if matched_ho.empty: st.caption("（無相關交接紀錄）")
     else:
         ho_desc = "\n---\n".join(matched_ho['Failure Description'].astype(str).tolist())
-        st.code(ho_desc, language="plaintext")
+        # 放棄 st.code，改用 st.info 保證手機上完美換行
+        ho_desc_md = ho_desc.replace('\n', '  \n')
+        st.info(ho_desc_md)
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]

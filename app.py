@@ -247,11 +247,13 @@ with tab_rca:
                                         time.sleep(1.5)
                                         st.rerun()
                     else:
-                        st.markdown("**🚨 可能原因 (Cause):**")
-                        # 移除 wrap 參數，避免舊版 Streamlit 報錯
-                        st.code(cause_text, language="plaintext")
-                        st.markdown("**✅ 解決方案 (Solution):**")
-                        st.code(solution_text, language="plaintext")
+                        # 將純文字的換行符號轉為 Markdown 支援的換行 (行尾加上兩個空白)
+                        display_cause = cause_text.replace('\n', '  \n')
+                        display_sol = solution_text.replace('\n', '  \n')
+                        
+                        # 改用 st.error 與 st.success，保證手機上完美自動換行
+                        st.error(f"**🚨 可能原因 (Cause):**  \n{display_cause}")
+                        st.success(f"**✅ 解決方案 (Solution):**  \n{display_sol}")
                         
                         meta_info = []
                         if log_text != "無資料": meta_info.append(f"**Log:** {log_text}")
@@ -817,7 +819,7 @@ with tab_work:
                     dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }}"""
             if dynamic_custom_css_t4: st.markdown(f"<style>{dynamic_custom_css_t4}</style>", unsafe_allow_html=True)
 
-            with st.expander("🎛️ 點擊展開 NO. 快速選擇面板", expanded=False):
+            with st.expander("🎛️️ 點擊展開 NO. 快速選擇面板", expanded=False):
                 st.markdown('<div class="t4-panel" style="display:none;"></div>', unsafe_allow_html=True)
                 if len(valid_sys_list) == 0: st.info(f"📂 尚無 {current_build} 資料")
                 else:
