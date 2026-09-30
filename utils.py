@@ -49,14 +49,24 @@ def get_custom_css():
     div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] button p { 
         font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; 
     }
+    
+    /* 確保 Code Block 右上角的複製按鈕隨時顯示 */
     div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
 
-    /* 🔥 強制 st.code 區塊自動換行 (避免出現水平捲軸) 🔥 */
+    /* 🔥 手機版終極對策：強制 st.code 區塊完全自動換行，消滅所有水平捲軸 🔥 */
+    div[data-testid="stCodeBlock"], 
+    div[data-testid="stCodeBlock"] > div {
+        overflow-x: hidden !important; /* 直接切斷外層容器的水平捲軸 */
+        max-width: 100% !important;
+    }
     div[data-testid="stCodeBlock"] pre,
-    div[data-testid="stCodeBlock"] code {
-        white-space: pre-wrap !important;
-        word-break: break-word !important;
+    div[data-testid="stCodeBlock"] code,
+    div[data-testid="stCodeBlock"] span {
+        white-space: pre-wrap !important; /* 保留原本的換行符，但遇到邊界強制折行 */
+        word-wrap: break-word !important; 
+        word-break: break-word !important; /* 單字太長也強制切斷 */
         overflow-wrap: break-word !important;
+        max-width: 100% !important;
     }
 
     /* 客製化追蹤問題 (Expander) 標題內的色塊顏色 */
