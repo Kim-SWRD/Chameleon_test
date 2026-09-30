@@ -51,6 +51,14 @@ def get_custom_css():
     }
     div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
 
+    /* 🔥 強制 st.code 區塊自動換行 (避免出現水平捲軸) 🔥 */
+    div[data-testid="stCodeBlock"] pre,
+    div[data-testid="stCodeBlock"] code {
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+
     /* 客製化追蹤問題 (Expander) 標題內的色塊顏色 */
     div[data-testid="stExpander"] summary p span:nth-of-type(1) { background-color: #ffc107 !important; color: #000000 !important; border-radius: 4px !important; padding: 2px 8px !important; font-weight: bold !important; }
     div[data-testid="stExpander"] summary p span:nth-of-type(2) { background-color: #dbeafe !important; color: #1e3a8a !important; border-radius: 4px !important; padding: 2px 8px !important; }
@@ -153,7 +161,7 @@ def get_next_work_id(df):
     return f"W-{ids.max() + 1:03d}"
 
 def render_handover_status(sys_id, build_name, df_ho, is_editing=False):
-    # 動態正則表達式，例如： "^TS3.*#\s*5"
+    # 動態正則表達式
     pattern = f"^{build_name}.*#\\s*{sys_id}(?:[^0-9]|$)"
     matched_ho = df_ho[df_ho['System'].str.match(pattern, na=False, case=False)]
     if is_editing: st.markdown("#### 🔄 日夜交接狀態 (唯讀)")
