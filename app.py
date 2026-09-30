@@ -11,7 +11,7 @@ st.markdown(get_custom_css(), unsafe_allow_html=True)
 # ⚙️ 側邊欄：全域 Build 切換器
 # ==========================================
 st.sidebar.title("⚙️ 系統設定")
-build_options = ["TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
+build_options = ["TS1", "TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
 current_build = st.sidebar.selectbox("📌 選擇目前專案 Build", build_options, index=0)
 st.sidebar.divider()
 st.sidebar.info(f"👉 目前選中：**{current_build}**\n\n系統將自動存取 `{current_build}_mapping.xlsx` 與 `{current_build}_note.xlsx`")
