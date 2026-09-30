@@ -4,14 +4,14 @@ import time
 from github import Github
 from utils import *  # 導入工具函式
 
-st.set_page_config(page_title="卡美問題與 SN 查詢", layout="wide") # 建議寬螢幕，較好檢視
+st.set_page_config(page_title="卡美問題與 SN 查詢", layout="wide")
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
 # ==========================================
 # ⚙️ 側邊欄：全域 Build 切換器
 # ==========================================
 st.sidebar.title("⚙️ 系統設定")
-build_options = ["TS2", "TS3", "TS4"] # 可以隨意擴充
+build_options = ["TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
 current_build = st.sidebar.selectbox("📌 選擇目前專案 Build", build_options, index=0)
 st.sidebar.divider()
 st.sidebar.info(f"👉 目前選中：**{current_build}**\n\n系統將自動存取 `{current_build}_mapping.xlsx` 與 `{current_build}_note.xlsx`")
@@ -47,7 +47,107 @@ tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔍 SOP", "🔄 Mapping", "�
 # 分頁 1: 故障排除 (SOP)
 # ==========================================
 with tab_rca:
-    st.header("🔍 SOP (共用)")
+    col_title_rca, col_upload_rca, col_add_rca = st.columns([0.4, 0.4, 0.2])
+    with col_title_rca:
+        st.header("🔍 SOP (共用)")
+        
+    with col_upload_rca:
+        with st.expander("📤 上傳 / 下載 RCA", expanded=False):
+            try:
+                with open("RCA.xlsx", "rb") as f:
+                    st.download_button(label="📥 下載目前 RCA 檔", data=f, file_name="RCA.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            except FileNotFoundError: 
+                st.warning("目前伺服器上尚未產生 RCA.xlsx")
+                
+            st.divider()
+            uploaded_rca = st.file_uploader("上傳新的 RCA 檔案 (.xlsx)", type=["xlsx"], key="upload_rca")
+            if uploaded_rca:
+                try:
+                    df_rca_test = pd.read_excel(uploaded_rca, dtype=str)
+                    st.success(f"✅ 驗證通過！共讀取到 {len(df_rca_test)} 筆 SOP 資料。")
+                    if st.button("🚀 確認上傳並覆蓋", key="btn_upload_rca", use_container_width=True, type="primary"):
+                        if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                            st.error("❌ 尚未設定系統同步憑證或 Repo！")
+                        else:
+                            with st.spinner("🔄 上傳中..."):
+                                uploaded_rca.seek(0)
+                                excel_bytes = uploaded_rca.read()
+                                with open("RCA.xlsx", "wb") as f: f.write(excel_bytes)
+                                repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+                                try:
+                                    contents = repo.get_contents("RCA.xlsx")
+                                    repo.update_file(contents.path, "Update RCA.xlsx via Streamlit Upload", excel_bytes, contents.sha)
+                                except Exception:
+                                    repo.create_file("RCA.xlsx", "Upload RCA.xlsx via Streamlit Upload", excel_bytes)
+                                st.cache_data.clear()
+                                st.success("✅ 檔案已成功更新！畫面即將重新載入...")
+                                time.sleep(1.5)
+                                st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 解析檔案失敗：{e}")
+
+    with col_add_rca:
+        if st.button("➕ 新增 SOP", use_container_width=True, type="primary"):
+            st.session_state["show_add_rca"] = not st.session_state.get("show_add_rca", False)
+
+    # === 新增 SOP 表單 ===
+    if st.session_state.get("show_add_rca", False):
+        with st.container(border=True):
+            st.subheader("🆕 新增 SOP 紀錄")
+            
+            rca_c1, rca_c2 = st.columns(2)
+            with rca_c1:
+                unique_stations_all = [x for x in df_rca["STATION"].unique() if x != "無資料"] if not df_rca.empty else []
+                sel_station = st.selectbox("STATION", unique_stations_all + ["自訂 (請在下方輸入)"])
+                if sel_station == "自訂 (請在下方輸入)": new_station = st.text_input("✍️ 自訂 STATION", key="new_custom_station")
+                else: new_station = sel_station
+                
+                new_bincode = st.text_input("BIN_CODE")
+                
+            with rca_c2:
+                new_bin = st.text_input("BIN")
+                new_subbin = st.text_input("SUB_BIN")
+                
+            new_cause = st.text_area("可能原因 (Cause)")
+            new_sol = st.text_area("解決方案 (Solution)")
+            
+            rca_c3, rca_c4 = st.columns(2)
+            new_log = rca_c3.text_input("Ref Log")
+            new_rev = rca_c4.text_input("REV")
+            
+            st.write("")
+            col_rca_sub, col_rca_can = st.columns(2)
+            if col_rca_sub.button("💾 儲存並同步", type="primary", use_container_width=True):
+                if not new_bincode.strip() and not new_bin.strip(): 
+                    st.error("⚠️ 請至少填寫 BIN_CODE 或 BIN！")
+                elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                    st.error("❌ 尚未設定系統同步憑證或 Repo！")
+                else:
+                    with st.spinner("🔄 上傳中..."):
+                        new_row = pd.DataFrame([{
+                            'STATION': new_station.strip() or "無資料",
+                            'BIN_CODE': new_bincode.strip() or "無資料",
+                            'BIN': new_bin.strip() or "無資料",
+                            'SUB_BIN': new_subbin.strip() or "無資料",
+                            'Possible Cause': new_cause.strip() or "無資料",
+                            'Solution': new_sol.strip() or "無資料",
+                            'Ref Log': new_log.strip() or "無資料",
+                            'REV': new_rev.strip() or "無資料"
+                        }])
+                        df_rca_updated = pd.concat([df_rca, new_row], ignore_index=True) if not df_rca.empty else new_row
+                        save_df_to_github(df_rca_updated, "RCA.xlsx", "RCA.xlsx", "Add new SOP via Streamlit")
+                        st.session_state["show_add_rca"] = False
+                        st.cache_data.clear()
+                        st.success("✅ 已成功新增 SOP！畫面即將重新載入...")
+                        time.sleep(1.5)
+                        st.rerun()
+                        
+            if col_rca_can.button("❌ 取消", use_container_width=True):
+                st.session_state["show_add_rca"] = False
+                st.rerun()
+
+    st.divider()
+
     if df_rca.empty:
         st.warning("⚠️ 找不到 RCA.xlsx 或資料為空")
     else:
@@ -99,14 +199,63 @@ with tab_rca:
             
             for index, row in final_df.iterrows():
                 with st.container(border=True):
-                    cause_text = str(row['Possible Cause']).replace('\\n', '\n').replace('\n', '  \n')
-                    solution_text = str(row['Solution']).replace('\\n', '\n').replace('\n', '  \n')
-                    st.error(f"**🚨 可能原因 (Cause):**  \n{cause_text}")
-                    st.success(f"**✅ 解決方案 (Solution):**  \n{solution_text}")
-                    meta_info = []
-                    if row['Ref Log'] != "無資料": meta_info.append(f"**Log:** {row['Ref Log']}")
-                    if row['REV'] != "無資料": meta_info.append(f"**REV:** {row['REV']}")
-                    if meta_info: st.caption(" | ".join(meta_info))
+                    c_title, c_toggle = st.columns([0.8, 0.2], vertical_alignment="center")
+                    with c_title: st.markdown(f"#### 📝 紀錄索引號：#{index}")
+                    with c_toggle: is_rca_editing = st.toggle("✏️ 進入編輯", key=f"rca_edit_tog_{index}")
+                    
+                    cause_text = str(row['Possible Cause']).replace('\\n', '\n')
+                    solution_text = str(row['Solution']).replace('\\n', '\n')
+                    log_text = str(row['Ref Log'])
+                    rev_text = str(row['REV'])
+                    
+                    if is_rca_editing:
+                        e_cause = st.text_area("🚨 可能原因 (Cause)", value=cause_text, key=f"e_rca_c_{index}")
+                        e_sol = st.text_area("✅ 解決方案 (Solution)", value=solution_text, key=f"e_rca_s_{index}")
+                        
+                        c_log, c_rev = st.columns(2)
+                        e_log = c_log.text_input("Log", value=log_text if log_text != "無資料" else "", key=f"e_rca_l_{index}")
+                        e_rev = c_rev.text_input("REV", value=rev_text if rev_text != "無資料" else "", key=f"e_rca_r_{index}")
+                        
+                        st.write("")
+                        col_save, col_del = st.columns(2)
+                        with col_save:
+                            if st.button("💾 儲存修改並同步", key=f"rca_save_{index}", type="primary", use_container_width=True):
+                                if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                    st.error("❌ 尚未設定系統同步憑證或 Repo！")
+                                else:
+                                    with st.spinner("🔄 更新中..."):
+                                        df_rca.loc[index, 'Possible Cause'] = e_cause.strip() or "無資料"
+                                        df_rca.loc[index, 'Solution'] = e_sol.strip() or "無資料"
+                                        df_rca.loc[index, 'Ref Log'] = e_log.strip() or "無資料"
+                                        df_rca.loc[index, 'REV'] = e_rev.strip() or "無資料"
+                                        
+                                        save_df_to_github(df_rca, "RCA.xlsx", "RCA.xlsx", f"Update SOP index {index} via Streamlit")
+                                        st.cache_data.clear()
+                                        st.success("✅ 已儲存！畫面即將重新載入...")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                        with col_del:
+                            if st.button("🗑️ 刪除此筆紀錄", key=f"rca_del_{index}", type="secondary", use_container_width=True):
+                                if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                    st.error("❌ 尚未設定系統同步憑證或 Repo！")
+                                else:
+                                    with st.spinner("🔄 刪除中..."):
+                                        df_rca_deleted = df_rca.drop(index)
+                                        save_df_to_github(df_rca_deleted, "RCA.xlsx", "RCA.xlsx", f"Delete SOP index {index} via Streamlit")
+                                        st.cache_data.clear()
+                                        st.success("✅ 已刪除！畫面即將重新載入...")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                    else:
+                        st.markdown("**🚨 可能原因 (Cause):**")
+                        st.code(cause_text, language="plaintext")
+                        st.markdown("**✅ 解決方案 (Solution):**")
+                        st.code(solution_text, language="plaintext")
+                        
+                        meta_info = []
+                        if log_text != "無資料": meta_info.append(f"**Log:** {log_text}")
+                        if rev_text != "無資料": meta_info.append(f"**REV:** {rev_text}")
+                        if meta_info: st.caption(" | ".join(meta_info))
 
 # ==========================================
 # 分頁 2: Mapping
