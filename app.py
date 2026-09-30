@@ -174,7 +174,7 @@ with tab_rca:
                     st.caption(f"💡 對應 BIN: {display_bin}")
             else:
                 unique_bins = [x for x in base_df["BIN"].unique() if x != "無資料"]
-                selected_val = st.selectbox("🏷️ 第二步：請選擇 BIN", unique_bins, key="rca_bin")
+                selected_val = st.selectbox("🏷 第二步：請選擇 BIN", unique_bins, key="rca_bin")
                 if selected_val:
                     filtered_df = base_df[base_df["BIN"] == selected_val]
                     associated_bin_codes = [x for x in filtered_df["BIN_CODE"].unique() if x != "無資料"]
@@ -248,6 +248,7 @@ with tab_rca:
                                         st.rerun()
                     else:
                         st.markdown("**🚨 可能原因 (Cause):**")
+                        # 移除 wrap 參數，避免舊版 Streamlit 報錯
                         st.code(cause_text, language="plaintext")
                         st.markdown("**✅ 解決方案 (Solution):**")
                         st.code(solution_text, language="plaintext")

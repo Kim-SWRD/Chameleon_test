@@ -50,23 +50,13 @@ def get_custom_css():
         font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; 
     }
     
-    /* 確保 Code Block 右上角的複製按鈕隨時顯示 */
+    /* 確保 Code Block 右上角的複製按鈕隨時顯示，並強制換行 */
     div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
-
-    /* 🔥 手機版終極對策：強制 st.code 區塊完全自動換行，消滅所有水平捲軸 🔥 */
-    div[data-testid="stCodeBlock"], 
-    div[data-testid="stCodeBlock"] > div {
-        overflow-x: hidden !important; /* 直接切斷外層容器的水平捲軸 */
-        max-width: 100% !important;
-    }
-    div[data-testid="stCodeBlock"] pre,
-    div[data-testid="stCodeBlock"] code,
-    div[data-testid="stCodeBlock"] span {
-        white-space: pre-wrap !important; /* 保留原本的換行符，但遇到邊界強制折行 */
-        word-wrap: break-word !important; 
-        word-break: break-word !important; /* 單字太長也強制切斷 */
-        overflow-wrap: break-word !important;
-        max-width: 100% !important;
+    div[data-testid="stCodeBlock"] pre {
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        word-break: break-all !important;
+        overflow-x: hidden !important;
     }
 
     /* 客製化追蹤問題 (Expander) 標題內的色塊顏色 */
@@ -89,11 +79,8 @@ def load_rca_data():
 def load_mapping_data(build_name):
     filename = f"{build_name}_mapping.xlsx"
     empty_df = pd.DataFrame(columns=["SYS#", "CSM BASE", "CSM TRAY", "FULL SYS", "JTAG", "AOT", "FT", "STATUS", "OWNER", "Failure BIN"])
-    
-    try:
-        df = pd.read_excel(filename, dtype=str)
-    except FileNotFoundError:
-        return empty_df
+    try: df = pd.read_excel(filename, dtype=str)
+    except FileNotFoundError: return empty_df
 
     rename_dict = {}
     for col in df.columns:
@@ -110,8 +97,7 @@ def load_mapping_data(build_name):
         elif "FAILURE BIN" in col_upper or "FAIL BIN" in col_upper or "NOTE" in col_upper: rename_dict[col] = "Failure BIN"
             
     df.rename(columns=rename_dict, inplace=True)
-    if 'NO.' not in df.columns:
-        return empty_df # 格式錯誤時回傳空框架，避免 Crash
+    if 'NO.' not in df.columns: return empty_df
         
     df['NO.'] = df['NO.'].ffill()
     df = df.dropna(subset=['NO.'])
@@ -124,10 +110,8 @@ def load_mapping_data(build_name):
 @st.cache_data(ttl=60)
 def load_note_data(build_name):
     filename = f"{build_name}_note.xlsx"
-    try:
-        df = pd.read_excel(filename, dtype=str)
-    except FileNotFoundError:
-        return pd.DataFrame(columns=["NO.", "NOTE", "NOTICE", "BUILD"])
+    try: df = pd.read_excel(filename, dtype=str)
+    except FileNotFoundError: return pd.DataFrame(columns=["NO.", "NOTE", "NOTICE", "BUILD"])
         
     if 'NO.' in df.columns:
         df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
@@ -145,8 +129,7 @@ def load_handover_data():
             df_ho['System'] = df_ho['System'].astype(str).str.strip()
             df_ho['Failure Description'] = df_ho['Failure Description'].fillna("無資料")
             return df_ho
-    except FileNotFoundError:
-        pass
+    except FileNotFoundError: pass
     return pd.DataFrame(columns=['System', 'Failure Description'])
 
 @st.cache_data(ttl=60)
@@ -171,7 +154,6 @@ def get_next_work_id(df):
     return f"W-{ids.max() + 1:03d}"
 
 def render_handover_status(sys_id, build_name, df_ho, is_editing=False):
-    # 動態正則表達式
     pattern = f"^{build_name}.*#\\s*{sys_id}(?:[^0-9]|$)"
     matched_ho = df_ho[df_ho['System'].str.match(pattern, na=False, case=False)]
     if is_editing: st.markdown("#### 🔄 日夜交接狀態 (唯讀)")
@@ -199,16 +181,12 @@ def get_station_idx(val):
     return 0
 
 def save_df_to_github(df, filename, repo_path, commit_message):
-    try:
-        df.to_excel(filename, index=False)
-    except Exception:
-        pass 
-
+    try: df.to_excel(filename, index=False)
+    except Exception: pass 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
     excel_data = output.getvalue()
-    
     repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
     try:
         contents = repo.get_contents(repo_path)
@@ -222,7 +200,6 @@ def get_sys_states(df_map, df_note):
         if ft_val == "PASS": return "pass"
         elif ft_val == "FAIL": return "fail"
         return "empty"
-
     status_states = {}
     if not df_map.empty:
         for _, row in df_map.iterrows():
@@ -230,7 +207,6 @@ def get_sys_states(df_map, df_note):
             state = get_t3_state(row)
             if sys_id not in status_states or state == "pass" or (state == "fail" and status_states[sys_id] == "empty"):
                 status_states[sys_id] = state
-
     notice_states = {}
     if not df_note.empty:
         for _, row in df_note.iterrows():
@@ -238,5 +214,4 @@ def get_sys_states(df_map, df_note):
             n_val = str(row.get('NOTICE', '0')).strip()
             if n_val.endswith('.0'): n_val = n_val[:-2]
             notice_states[sys_id] = n_val
-
     return status_states, notice_states
