@@ -11,7 +11,7 @@ st.markdown(get_custom_css(), unsafe_allow_html=True)
 # ⚙️ 側邊欄：全域 Build 切換器
 # ==========================================
 st.sidebar.title("⚙️ 系統設定")
-build_options = ["TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
+build_options = ["TS1", "TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
 current_build = st.sidebar.selectbox("📌 選擇目前專案 Build", build_options, index=0)
 st.sidebar.divider()
 st.sidebar.info(f"👉 目前選中：**{current_build}**\n\n系統將自動存取 `{current_build}_mapping.xlsx` 與 `{current_build}_note.xlsx`")
@@ -206,7 +206,7 @@ with tab_rca:
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.8, 0.2], vertical_alignment="center")
                     with c_title: st.markdown(f"#### 📝 紀錄索引號：#{index}")
-                    with c_toggle: is_rca_editing = st.toggle("✏️️ 進入編輯", key=f"rca_edit_tog_{index}")
+                    with c_toggle: is_rca_editing = st.toggle("✏ 進入編輯", key=f"rca_edit_tog_{index}")
                     
                     cause_text = str(row['Possible Cause']).replace('\\n', '\n')
                     solution_text = str(row['Solution']).replace('\\n', '\n')
@@ -487,7 +487,7 @@ with tab_map:
                     else:
                         st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
-            st.error(f"⚠️ 找不到資料，請確認輸入是否有誤。")
+            st.error(f"⚠️️ 找不到資料，請確認輸入是否有誤。")
 
 # ==========================================
 # 分頁 3: WIP (STATUS)
@@ -616,6 +616,61 @@ with tab_status:
                 btn_type = "primary" if state == "pass" else "secondary"
                 cols[idx].button(str(sys_val), key=f"btn_t3_{sys_val}", on_click=set_sys_status_search, args=(sys_val,), type=btn_type, use_container_width=True)
 
+    # ==========================================
+    # 🌟 新增：批次設定 NOTICE 狀態區塊
+    # ==========================================
+    with st.expander("🛠️️ 批次設定特別標註 (NOTICE)", expanded=False):
+        st.markdown("在這裡可以一次選擇多台系統，大量開啟或關閉紅色標註。")
+        c_bulk_sys, c_bulk_action = st.columns([0.7, 0.3])
+        
+        with c_bulk_sys:
+            # 讓使用者多選 SYS#
+            selected_bulk_sys = st.multiselect("📌 請選擇要批次操作的機台 (可複選)", valid_sys_list, key="bulk_notice_sys")
+            
+        with c_bulk_action:
+            # 選擇要開啟還是關閉 NOTICE
+            bulk_action = st.radio("🚨 標註動作", ["🔴 開啟 NOTICE (設為紅色)", "⚪ 關閉 NOTICE (取消紅色)"], key="bulk_notice_action")
+            
+        if st.button("💾 批次執行並同步", key="btn_bulk_notice", type="primary", use_container_width=True):
+            if not selected_bulk_sys:
+                st.warning("⚠ 請至少選擇一台機台！")
+            elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                st.error("❌ 尚未設定系統同步憑證或 Repo！")
+            else:
+                with st.spinner("🔄 批次更新並上傳 Note 檔案中..."):
+                    try:
+                        new_notice_val = '1' if "開啟" in bulk_action else '0'
+                        
+                        # 迴圈處理每一個選中的機台
+                        for sys_id in selected_bulk_sys:
+                            idx_note = df_note[df_note['NO.'] == str(sys_id)].index
+                            if not idx_note.empty:
+                                # 如果原本已經有 Note 紀錄，直接更新 NOTICE 欄位
+                                df_note.loc[idx_note, 'NOTICE'] = new_notice_val
+                            else:
+                                # 如果該機台還沒有任何 Note 紀錄，則建立一筆新資料
+                                new_row = pd.DataFrame([{
+                                    "BUILD": current_build, 
+                                    "NO.": str(sys_id), 
+                                    "NOTE": "無資料", 
+                                    "NOTICE": new_notice_val
+                                }])
+                                df_note = pd.concat([df_note, new_row], ignore_index=True)
+                                
+                        # 儲存並同步至 GitHub
+                        commit_msg = f"Bulk update NOTICE for {len(selected_bulk_sys)} systems via Streamlit"
+                        save_df_to_github(df_note, file_note, file_note, commit_msg)
+                        
+                        st.cache_data.clear()
+                        st.success(f"✅ 成功更新 {len(selected_bulk_sys)} 台機台的狀態！畫面即將重新載入...")
+                        time.sleep(1.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ 批次上傳失敗: {e}")
+
+    # ==========================================
+    # 單一機台編輯與狀態顯示
+    # ==========================================
     if active_status_sys and not df_map.empty:
         match_df = df_map[df_map['SYS#'] == active_status_sys]
         if not match_df.empty:
@@ -630,7 +685,7 @@ with tab_status:
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
                     with c_title: st.markdown(f"### 🔹 系統標號：{current_build}#{sys_id}")
-                    with c_toggle: is_editing = st.toggle("✏️ 進入編輯模式", key=f"t3_toggle_{sys_id}")
+                    with c_toggle: is_editing = st.toggle("✏️️ 進入編輯模式", key=f"t3_toggle_{sys_id}")
                     
                     if val_notice == '1' and not is_editing:
                         st.error("🚨 **此機台已設定特別標註 (NOTICE)**")
@@ -950,7 +1005,7 @@ with tab_work:
                 st.write("")
                 col_resolve, col_delete = st.columns(2)
                 with col_resolve: st.button("✅ 直接標記已解決", key=f"w_quick_resolve_{item_id}", use_container_width=True, on_click=cb_update_work_status, args=(item_id, 'Resolved'))
-                with col_delete: st.button("🗑️️ 刪除此事項", key=f"w_del_{item_id}", use_container_width=True, on_click=cb_delete_work_item, args=(item_id,))
+                with col_delete: st.button("🗑 刪除此事項", key=f"w_del_{item_id}", use_container_width=True, on_click=cb_delete_work_item, args=(item_id,))
 
     st.write("")
     st.write("")
