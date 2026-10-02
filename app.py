@@ -22,6 +22,7 @@ if "map_search_input" not in st.session_state: st.session_state["map_search_inpu
 if "status_active_sys" not in st.session_state: st.session_state["status_active_sys"] = ""
 if "w_add_no_input" not in st.session_state: st.session_state["w_add_no_input"] = ""
 if "show_export_list" not in st.session_state: st.session_state["show_export_list"] = False
+if "show_export_resolved" not in st.session_state: st.session_state["show_export_resolved"] = False
 
 # --- 動態讀取資料 ---
 df_rca = load_rca_data()
@@ -1022,7 +1023,37 @@ with tab_work:
     # ---------------------------
     # ✅ 已解決 (Resolved) 區塊
     # ---------------------------
-    st.subheader(f"✅ 已解決 ({len(df_resolved)})")
+    col_res_title, col_res_export = st.columns([0.8, 0.2])
+    with col_res_title:
+        st.subheader(f"✅ 已解決 ({len(df_resolved)})")
+    with col_res_export:
+        if st.button("📋 匯出已解決清單", use_container_width=True):
+            st.session_state["show_export_resolved"] = not st.session_state.get("show_export_resolved", False)
+
+    # === 彈出的已解決匯出清單框塊 ===
+    if st.session_state.get("show_export_resolved", False):
+        with st.container(border=True):
+            if df_resolved.empty:
+                st.warning("目前無任何已解決項目。")
+            else:
+                export_res_lines = []
+                for i, (_, r) in enumerate(df_resolved.iterrows(), 1):
+                    build_no = f"{r.get('BUILD', '')}#{r.get('NO.', '')}"
+                    station = r.get('Station', '')
+                    desc = r.get('事項描述', '')
+                    
+                    report_text = str(r.get('回報狀況', '無資料')).strip()
+                    if not report_text: report_text = "無資料"
+                    # 讓回報狀況如果是多行，也能漂亮地縮排對齊
+                    report_text = report_text.replace('\n', '\n           ')
+                    
+                    export_res_lines.append(f"{i}. {build_no} : {station} - {desc}")
+                    export_res_lines.append(f"--> {report_text}")
+                
+                st.markdown("**📝 已解決清單複製區** (💡 請點擊下方文字框右上角的『複製按鈕』)")
+                st.code("\n".join(export_res_lines), language="plaintext")
+        st.write("")
+
     if df_resolved.empty: st.info(f"目前 {current_build} 無已解決項目")
         
     for idx, row in df_resolved.iterrows():
