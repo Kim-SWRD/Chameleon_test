@@ -11,7 +11,7 @@ st.markdown(get_custom_css(), unsafe_allow_html=True)
 # ⚙️ 側邊欄：全域 Build 切換器
 # ==========================================
 st.sidebar.title("⚙️ 系統設定")
-build_options = ["TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
+build_options = ["TS1", "TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
 current_build = st.sidebar.selectbox("📌 選擇目前專案 Build", build_options, index=0)
 st.sidebar.divider()
 st.sidebar.info(f"👉 目前選中：**{current_build}**\n\n系統將自動存取 `{current_build}_mapping.xlsx` 與 `{current_build}_note.xlsx`")
@@ -192,10 +192,9 @@ with tab_rca:
         if not filtered_df.empty and selected_sub_bin:
             st.divider() 
             
-            # 將這裡改為 st.code，這樣就有自帶的複製按鈕了！
             st.markdown("**🏷️ BIN_CODE:**")
             st.code(display_bin_code, language="plaintext")
-            st.markdown("**🏷️ BIN 全文:**")
+            st.markdown("**🏷️️ BIN 全文:**")
             st.code(display_bin, language="plaintext")
             if selected_sub_bin != "無資料":
                 st.markdown("**🏷️ SUB_BIN 全文:**")
@@ -216,7 +215,6 @@ with tab_rca:
                     rev_text = str(row['REV'])
                     
                     if is_rca_editing:
-                        # 開放修改 STATION, BIN_CODE, BIN, SUB_BIN
                         st.markdown("##### 🏷️ 編輯分類標籤")
                         c_st, c_bc = st.columns(2)
                         e_station = c_st.text_input("STATION", value=row.get('STATION', ''), key=f"e_rca_st_{index}")
@@ -257,7 +255,7 @@ with tab_rca:
                                         time.sleep(1.5)
                                         st.rerun()
                         with col_del:
-                            if st.button("🗑️ 刪除此筆紀錄", key=f"rca_del_{index}", type="secondary", use_container_width=True):
+                            if st.button("🗑️️ 刪除此筆紀錄", key=f"rca_del_{index}", type="secondary", use_container_width=True):
                                 if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
                                     st.error("❌ 尚未設定系統同步憑證或 Repo！")
                                 else:
@@ -802,7 +800,7 @@ with tab_work:
 
     col_w_title, col_w_upload, col_w_add = st.columns([0.4, 0.4, 0.2])
     with col_w_title:
-        st.header(f"📋 追踨 ({current_build})")
+        st.header(f"📋 追踨 (共用)")
         
     with col_w_upload:
         with st.expander("📤 上/下傳 Work_item (共用)", expanded=False):
@@ -881,9 +879,9 @@ with tab_work:
                     dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }}"""
             if dynamic_custom_css_t4: st.markdown(f"<style>{dynamic_custom_css_t4}</style>", unsafe_allow_html=True)
 
-            with st.expander("🎛️ 點擊展開 NO. 快速選擇面板", expanded=False):
+            with st.expander("🎛️ 點擊展開 NO. 快速選擇面板 (💡 顯示為左側欄選中專案的機台)", expanded=False):
                 st.markdown('<div class="t4-panel" style="display:none;"></div>', unsafe_allow_html=True)
-                if len(valid_sys_list) == 0: st.info(f"📂 尚無 {current_build} 資料")
+                if len(valid_sys_list) == 0: st.info(f"📂 尚無資料")
                 else:
                     btn_cols = st.columns(len(valid_sys_list))
                     for idx, sys_val in enumerate(valid_sys_list):
@@ -927,10 +925,11 @@ with tab_work:
 
     st.divider()
 
-    # 自動過濾僅顯示當前 Build 的追蹤項目
-    df_work_current = df_work[df_work['BUILD'].str.upper() == current_build.upper()]
-    df_ongoing = df_work_current[df_work_current['工作狀態'] != 'Resolved']
-    df_resolved = df_work_current[df_work_current['工作狀態'] == 'Resolved']
+    # ==========================================
+    # 改為顯示所有 Build 的追蹤項目 (共用)
+    # ==========================================
+    df_ongoing = df_work[df_work['工作狀態'] != 'Resolved']
+    df_resolved = df_work[df_work['工作狀態'] == 'Resolved']
     
     # ---------------------------
     # 🔥 目前追蹤 (Ongoing) 區塊
@@ -956,11 +955,11 @@ with tab_work:
                 st.code("\n".join(export_lines), language="plaintext")
         st.write("")
 
-    if df_ongoing.empty: st.info(f"目前 {current_build} 無待處理項目")
+    if df_ongoing.empty: st.info("目前無待處理項目")
         
     for idx, row in df_ongoing.iterrows():
         item_id = row.get('事項編號', f"W-XXX")
-        build_val = row.get('BUILD', current_build)
+        build_val = row.get('BUILD', '無')
         no_val = row.get('NO.', '無')
         station_val = row.get('Station', '無資料')
         desc_val = row.get('事項描述', '無標題')
@@ -972,9 +971,13 @@ with tab_work:
             is_w_edit = st.toggle("✏️ 進入編輯模式", key=f"w_toggle_{item_id}")
             st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：{desc_val}</div>", unsafe_allow_html=True)
             
+            # 動態抓取對應 Build 的 Mapping 檔案顯示機台站點與序號
+            item_build_val = str(row.get('BUILD', '')).strip().upper()
             cross_ref_no = str(row.get('NO.', '')).strip()
-            if not df_map.empty:
-                match_df = df_map[df_map['SYS#'] == cross_ref_no]
+            
+            if item_build_val:
+                item_df_map = load_mapping_data(item_build_val)
+                match_df = item_df_map[item_df_map['SYS#'] == cross_ref_no]
                 if not match_df.empty:
                     m_row = match_df.iloc[0]
                     st.markdown(f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`  \n**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`  \n**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`")
@@ -1048,17 +1051,17 @@ with tab_work:
                     report_text = report_text.replace('\n', '\n           ')
                     
                     export_res_lines.append(f"{i}. {build_no} : {station} - {desc}")
-                    export_res_lines.append(f"--> {report_text}")
+                    export_res_lines.append(f"       --> {report_text}")
                 
                 st.markdown("**📝 已解決清單複製區** (💡 請點擊下方文字框右上角的『複製按鈕』)")
                 st.code("\n".join(export_res_lines), language="plaintext")
         st.write("")
 
-    if df_resolved.empty: st.info(f"目前 {current_build} 無已解決項目")
+    if df_resolved.empty: st.info("目前無已解決項目")
         
     for idx, row in df_resolved.iterrows():
         item_id = row.get('事項編號', f"W-XXX")
-        build_val = row.get('BUILD', current_build)
+        build_val = row.get('BUILD', '無')
         no_val = row.get('NO.', '無')
         station_val = row.get('Station', '無資料')
         desc_val = row.get('事項描述', '無標題')
@@ -1068,10 +1071,14 @@ with tab_work:
         
         with st.expander(display_title, expanded=False):
             st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：{desc_val}</div>", unsafe_allow_html=True)
+            
+            # 動態抓取對應 Build 的 Mapping 檔案顯示機台站點與序號
+            item_build_val = str(row.get('BUILD', '')).strip().upper()
             cross_ref_no = str(row.get('NO.', '')).strip()
             
-            if not df_map.empty:
-                match_df = df_map[df_map['SYS#'] == cross_ref_no]
+            if item_build_val:
+                item_df_map = load_mapping_data(item_build_val)
+                match_df = item_df_map[item_df_map['SYS#'] == cross_ref_no]
                 if not match_df.empty:
                     m_row = match_df.iloc[0]
                     st.markdown(f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`  \n**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`  \n**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`")
