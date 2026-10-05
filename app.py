@@ -121,7 +121,7 @@ with tab_rca:
             col_rca_sub, col_rca_can = st.columns(2)
             if col_rca_sub.button("💾 儲存並同步", type="primary", use_container_width=True):
                 if not new_bincode.strip() and not new_bin.strip(): 
-                    st.error("⚠️ 請至少填寫 BIN_CODE 或 BIN！")
+                    st.error("⚠️️ 請至少填寫 BIN_CODE 或 BIN！")
                 elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
                     st.error("❌ 尚未設定系統同步憑證或 Repo！")
                 else:
@@ -255,7 +255,7 @@ with tab_rca:
                                         time.sleep(1.5)
                                         st.rerun()
                         with col_del:
-                            if st.button("🗑️️ 刪除此筆紀錄", key=f"rca_del_{index}", type="secondary", use_container_width=True):
+                            if st.button("🗑️ 刪除此筆紀錄", key=f"rca_del_{index}", type="secondary", use_container_width=True):
                                 if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
                                     st.error("❌ 尚未設定系統同步憑證或 Repo！")
                                 else:
@@ -889,7 +889,9 @@ with tab_work:
                         btn_type = "primary" if state == "pass" else "secondary"
                         btn_cols[idx].button(str(sys_val), key=f"btn_w_add_{sys_val}", on_click=set_add_no, args=(str(sys_val),), type=btn_type)
 
-            w_desc = st.text_input("事項描述")
+            # 🛠 這裡已升級為 text_area，讓你自由換行！
+            w_desc = st.text_area("📝 事項描述 (支援多行輸入)", height=100)
+            
             w_c4, w_c5 = st.columns(2)
             w_date = w_c4.text_input("起始日期 (YYYY-MM-DD)", value=time.strftime("%Y-%m-%d"))
             w_owner = w_c5.text_input("經手人員")
@@ -926,7 +928,7 @@ with tab_work:
     st.divider()
 
     # ==========================================
-    # 改為顯示所有 Build 的追蹤項目 (共用)
+    # 顯示所有 Build 的追蹤項目 (共用)
     # ==========================================
     df_ongoing = df_work[df_work['工作狀態'] != 'Resolved']
     df_resolved = df_work[df_work['工作狀態'] == 'Resolved']
@@ -949,7 +951,9 @@ with tab_work:
             else:
                 export_lines = []
                 for i, (_, r) in enumerate(df_ongoing.iterrows(), 1):
-                    export_lines.append(f"{i}. {r.get('BUILD', '')}#{r.get('NO.', '')} : {r.get('Station', '')} - {r.get('事項描述', '')}")
+                    # 處理換行，讓匯出文字依然完美縮排對齊
+                    desc_export = str(r.get('事項描述', '')).replace('\n', '\n       ')
+                    export_lines.append(f"{i}. {r.get('BUILD', '')}#{r.get('NO.', '')} : {r.get('Station', '')} - {desc_export}")
                 
                 st.markdown("**📝 快速複製區** (💡 請點擊下方文字框右上角的『複製按鈕』)")
                 st.code("\n".join(export_lines), language="plaintext")
@@ -962,16 +966,22 @@ with tab_work:
         build_val = row.get('BUILD', '無')
         no_val = row.get('NO.', '無')
         station_val = row.get('Station', '無資料')
-        desc_val = row.get('事項描述', '無標題')
+        
+        desc_val = str(row.get('事項描述', '無標題'))
+        # 標題欄過濾掉換行，避免破壞排版
+        desc_title = desc_val.replace('\n', ' ')
+        # 內文框保留換行，轉為 HTML 的換行標籤
+        desc_html = desc_val.replace('\n', '<br>')
+        
         date_val = str(row.get('起始日期', '')).strip()
         date_tag = f" :gray-background[ {date_val} ]" if date_val and date_val != "無資料" else ""
-        display_title = f":orange-background[ {build_val}#{no_val} ] :blue-background[ {station_val} ] {desc_val}{date_tag}"
+        display_title = f":orange-background[ {build_val}#{no_val} ] :blue-background[ {station_val} ] {desc_title}{date_tag}"
         
         with st.expander(display_title, expanded=False):
             is_w_edit = st.toggle("✏️ 進入編輯模式", key=f"w_toggle_{item_id}")
-            st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：{desc_val}</div>", unsafe_allow_html=True)
+            # 將這裡的描述顯示區塊升級，支援換行標籤
+            st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：<br>{desc_html}</div>", unsafe_allow_html=True)
             
-            # 動態抓取對應 Build 的 Mapping 檔案顯示機台站點與序號
             item_build_val = str(row.get('BUILD', '')).strip().upper()
             cross_ref_no = str(row.get('NO.', '')).strip()
             
@@ -988,8 +998,11 @@ with tab_work:
                 e_build = st.text_input("BUILD", value=row.get('BUILD', ''), key=f"e_build_{item_id}")
                 e_no = st.text_input("NO.", value=row.get('NO.', ''), key=f"e_no_{item_id}")
                 e_station = st.text_input("Station", value=row.get('Station', ''), key=f"e_station_{item_id}")
-                e_desc = st.text_input("事項描述", value=row.get('事項描述', ''), key=f"e_desc_{item_id}") 
+                
+                # 🛠 這裡升級為 text_area，讓編輯時也能換行！
+                e_desc = st.text_area("事項描述", value=desc_val, height=100, key=f"e_desc_{item_id}") 
                 e_report = st.text_area("回報狀況", value=row.get('回報狀況', ''), key=f"e_report_{item_id}")
+                
                 e_date = st.text_input("起始日期", value=row.get('起始日期', ''), key=f"e_date_{item_id}")
                 e_owner = st.text_input("經手人員", value=row.get('經手人員', ''), key=f"e_owner_{item_id}")
                 
@@ -1043,14 +1056,15 @@ with tab_work:
                 for i, (_, r) in enumerate(df_resolved.iterrows(), 1):
                     build_no = f"{r.get('BUILD', '')}#{r.get('NO.', '')}"
                     station = r.get('Station', '')
-                    desc = r.get('事項描述', '')
+                    
+                    # 處理換行，讓匯出文字依然完美縮排對齊
+                    desc_export = str(r.get('事項描述', '')).replace('\n', '\n       ')
                     
                     report_text = str(r.get('回報狀況', '無資料')).strip()
                     if not report_text: report_text = "無資料"
-                    # 讓回報狀況如果是多行，也能漂亮地縮排對齊
                     report_text = report_text.replace('\n', '\n           ')
                     
-                    export_res_lines.append(f"{i}. {build_no} : {station} - {desc}")
+                    export_res_lines.append(f"{i}. {build_no} : {station} - {desc_export}")
                     export_res_lines.append(f"       --> {report_text}")
                 
                 st.markdown("**📝 已解決清單複製區** (💡 請點擊下方文字框右上角的『複製按鈕』)")
@@ -1064,15 +1078,18 @@ with tab_work:
         build_val = row.get('BUILD', '無')
         no_val = row.get('NO.', '無')
         station_val = row.get('Station', '無資料')
-        desc_val = row.get('事項描述', '無標題')
+        
+        desc_val = str(row.get('事項描述', '無標題'))
+        desc_title = desc_val.replace('\n', ' ')
+        desc_html = desc_val.replace('\n', '<br>')
+        
         date_val = str(row.get('起始日期', '')).strip()
         date_tag = f" :gray-background[ {date_val} ]" if date_val and date_val != "無資料" else ""
-        display_title = f":orange-background[ {build_val}#{no_val} ] :blue-background[ {station_val} ] {desc_val}{date_tag}"
+        display_title = f":orange-background[ {build_val}#{no_val} ] :blue-background[ {station_val} ] {desc_title}{date_tag}"
         
         with st.expander(display_title, expanded=False):
-            st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：{desc_val}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：<br>{desc_html}</div>", unsafe_allow_html=True)
             
-            # 動態抓取對應 Build 的 Mapping 檔案顯示機台站點與序號
             item_build_val = str(row.get('BUILD', '')).strip().upper()
             cross_ref_no = str(row.get('NO.', '')).strip()
             
