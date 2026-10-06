@@ -121,7 +121,7 @@ with tab_rca:
             col_rca_sub, col_rca_can = st.columns(2)
             if col_rca_sub.button("💾 儲存並同步", type="primary", use_container_width=True):
                 if not new_bincode.strip() and not new_bin.strip(): 
-                    st.error("⚠️️ 請至少填寫 BIN_CODE 或 BIN！")
+                    st.error("⚠️ 請至少填寫 BIN_CODE 或 BIN！")
                 elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
                     st.error("❌ 尚未設定系統同步憑證或 Repo！")
                 else:
@@ -194,7 +194,7 @@ with tab_rca:
             
             st.markdown("**🏷️ BIN_CODE:**")
             st.code(display_bin_code, language="plaintext")
-            st.markdown("**🏷️️ BIN 全文:**")
+            st.markdown("**🏷 BIN 全文:**")
             st.code(display_bin, language="plaintext")
             if selected_sub_bin != "無資料":
                 st.markdown("**🏷️ SUB_BIN 全文:**")
@@ -357,16 +357,19 @@ with tab_map:
     current_search_val = st.session_state.get("map_search_input", "").strip()
     active_sys_numbers = set()
     
+    # 💡 [重大修復] 安全判斷搜尋欄位名稱，徹底避免 KeyError！
     if current_search_val and not df_map.empty:
         query_val = current_search_val
-        if current_search_col == f"{current_build}#":
-            query_val = query_val.upper().replace(f"{current_build}#", "").replace("TS#", "").strip()
+        if current_search_col and current_search_col.endswith("#"):
+            query_val = query_val.upper().replace(current_search_col, "").replace(f"{current_build}#", "").replace("TS#", "").strip()
             search_col_internal = "SYS#"
         else:
             search_col_internal = current_search_col
             
-        temp_df = df_map[df_map[search_col_internal] == query_val]
-        active_sys_numbers = set(temp_df["SYS#"].dropna().astype(str).tolist())
+        # 再加一層防呆：如果選擇的欄位在資料表中存在才執行查詢
+        if search_col_internal in df_map.columns:
+            temp_df = df_map[df_map[search_col_internal] == query_val]
+            active_sys_numbers = set(temp_df["SYS#"].dropna().astype(str).tolist())
 
     dynamic_yellow_css_t2 = ""
     full_cnt, partial_cnt, empty_cnt = 0, 0, 0
@@ -380,17 +383,14 @@ with tab_map:
         else: empty_cnt += 1
         
         if c in [1, 2]:
-            dynamic_yellow_css_t2 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
-            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
-            """
+            dynamic_yellow_css_t2 += (
+                f'div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }} '
+                f'div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }} '
+            )
             
         if is_selected:
-            dynamic_yellow_css_t2 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{
-                border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important;
-            }}
-            """
+            dynamic_yellow_css_t2 += f'div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }} '
+
     if dynamic_yellow_css_t2: st.markdown(f"<style>{dynamic_yellow_css_t2}</style>", unsafe_allow_html=True)
 
     panel_title_t2 = f"🎛️ {current_build}# 快速點選面板 (綠色: 完整({full_cnt}) / 黃色: 缺件({partial_cnt}) / 灰色: 無資料({empty_cnt}) / 框線放大: 目前選取)"
@@ -414,80 +414,80 @@ with tab_map:
         with col2: search_val = st.text_input(f"✍️ 請輸入 {search_col}", key="map_search_input").strip()
             
     if search_val and not df_map.empty:
-        if search_col == f"{current_build}#":
+        # 💡 [重大修復] 同理避免 KeyError 
+        if search_col and search_col.endswith("#"):
             search_col_internal = "SYS#"
-            search_val_proc = search_val.upper().replace(f"{current_build}#", "").replace("TS#", "").strip()
+            search_val_proc = search_val.upper().replace(search_col, "").replace(f"{current_build}#", "").replace("TS#", "").strip()
         else:
             search_col_internal = search_col
             search_val_proc = search_val
             
-        match_df = df_map[df_map[search_col_internal] == search_val_proc]
-        
-        if not match_df.empty:
-            st.success("✅ 找到對應的 SN 關聯資料！")
-            for idx, row in match_df.iterrows():
-                sys_id = row['SYS#']
-                
-                with st.container(border=True):
-                    c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
-                    with c_title: st.markdown(f"### 🔹 系統標號：{current_build}#{sys_id}")
-                    with c_toggle: is_editing = st.toggle("✏️ 進入編輯模式", key=f"t2_toggle_{sys_id}")
+        if search_col_internal in df_map.columns:
+            match_df = df_map[df_map[search_col_internal] == search_val_proc]
+            
+            if not match_df.empty:
+                st.success("✅ 找到對應的 SN 關聯資料！")
+                for idx, row in match_df.iterrows():
+                    sys_id = row['SYS#']
                     
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        st.markdown("**CSM BASE**")
-                        val_base = row['CSM BASE'] if pd.notna(row['CSM BASE']) and row['CSM BASE'] != "無資料" else ""
-                        if is_editing: st.text_input("CSM BASE", value=val_base, label_visibility="collapsed", key=f"t2_edit_base_{sys_id}")
-                        else: st.code(val_base if val_base else "無資料", language="plaintext")
-                            
-                    with c2:
-                        st.markdown("**CSM TRAY**")
-                        val_tray = row['CSM TRAY'] if pd.notna(row['CSM TRAY']) and row['CSM TRAY'] != "無資料" else ""
-                        if is_editing: st.text_input("CSM TRAY", value=val_tray, label_visibility="collapsed", key=f"t2_edit_tray_{sys_id}")
-                        else: st.code(val_tray if val_tray else "無資料", language="plaintext")
-                            
-                    with c3:
-                        st.markdown("**FULL SYS**")
-                        val_full = row['FULL SYS'] if pd.notna(row['FULL SYS']) and row['FULL SYS'] != "無資料" else ""
-                        if is_editing: st.text_input("FULL SYS", value=val_full, label_visibility="collapsed", key=f"t2_edit_full_{sys_id}")
-                        else: st.code(val_full if val_full else "無資料", language="plaintext")
-                    
-                    if is_editing:
-                        st.divider()
-                        st.markdown("#### 🔍 站點狀態")
-                        s_c1, s_c2, s_c3 = st.columns(3)
-                        with s_c1: st.selectbox("JTAG", station_opts_rca, index=get_station_idx(row.get('JTAG')), key=f"t2_edit_jtag_{sys_id}")
-                        with s_c2: st.selectbox("AOT", station_opts_rca, index=get_station_idx(row.get('AOT')), key=f"t2_edit_aot_{sys_id}")
-                        with s_c3: st.selectbox("FT", station_opts_rca, index=get_station_idx(row.get('FT')), key=f"t2_edit_ft_{sys_id}")
-                            
-                        st.write("") 
-                        if st.button("💾 儲存修改並同步", key=f"t2_save_btn_{sys_id}", type="primary", use_container_width=True):
-                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
-                            else:
-                                with st.spinner("🔄 正在更新..."):
-                                    try:
-                                        idx_update = df_map[df_map['SYS#'] == sys_id].index
-                                        df_map.loc[idx_update, 'CSM BASE'] = st.session_state.get(f"t2_edit_base_{sys_id}", "").strip() or "無資料"
-                                        df_map.loc[idx_update, 'CSM TRAY'] = st.session_state.get(f"t2_edit_tray_{sys_id}", "").strip() or "無資料"
-                                        df_map.loc[idx_update, 'FULL SYS'] = st.session_state.get(f"t2_edit_full_{sys_id}", "").strip() or "無資料"
-                                        df_map.loc[idx_update, 'JTAG'] = st.session_state.get(f"t2_edit_jtag_{sys_id}", "無資料")
-                                        df_map.loc[idx_update, 'AOT'] = st.session_state.get(f"t2_edit_aot_{sys_id}", "無資料")
-                                        df_map.loc[idx_update, 'FT'] = st.session_state.get(f"t2_edit_ft_{sys_id}", "無資料")
+                    with st.container(border=True):
+                        c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
+                        with c_title: st.markdown(f"### 🔹 系統標號：{current_build}#{sys_id}")
+                        with c_toggle: is_editing = st.toggle("✏️ 進入編輯模式", key=f"t2_toggle_{sys_id}")
+                        
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.markdown("**CSM BASE**")
+                            val_base = row['CSM BASE'] if pd.notna(row['CSM BASE']) and row['CSM BASE'] != "無資料" else ""
+                            if is_editing: st.text_input("CSM BASE", value=val_base, label_visibility="collapsed", key=f"t2_edit_base_{sys_id}")
+                            else: st.code(val_base if val_base else "無資料", language="plaintext")
+                                
+                        with c2:
+                            st.markdown("**CSM TRAY**")
+                            val_tray = row['CSM TRAY'] if pd.notna(row['CSM TRAY']) and row['CSM TRAY'] != "無資料" else ""
+                            if is_editing: st.text_input("CSM TRAY", value=val_tray, label_visibility="collapsed", key=f"t2_edit_tray_{sys_id}")
+                            else: st.code(val_tray if val_tray else "無資料", language="plaintext")
+                                
+                        with c3:
+                            st.markdown("**FULL SYS**")
+                            val_full = row['FULL SYS'] if pd.notna(row['FULL SYS']) and row['FULL SYS'] != "無資料" else ""
+                            if is_editing: st.text_input("FULL SYS", value=val_full, label_visibility="collapsed", key=f"t2_edit_full_{sys_id}")
+                            else: st.code(val_full if val_full else "無資料", language="plaintext")
+                        
+                        if is_editing:
+                            st.divider()
+                            st.markdown("#### 🔍 站點狀態")
+                            s_c1, s_c2, s_c3 = st.columns(3)
+                            with s_c1: st.selectbox("JTAG", station_opts_rca, index=get_station_idx(row.get('JTAG')), key=f"t2_edit_jtag_{sys_id}")
+                            with s_c2: st.selectbox("AOT", station_opts_rca, index=get_station_idx(row.get('AOT')), key=f"t2_edit_aot_{sys_id}")
+                            with s_c3: st.selectbox("FT", station_opts_rca, index=get_station_idx(row.get('FT')), key=f"t2_edit_ft_{sys_id}")
+                                
+                            st.write("") 
+                            if st.button("💾 儲存修改並同步", key=f"t2_save_btn_{sys_id}", type="primary", use_container_width=True):
+                                if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                    st.error("❌ 尚未設定系統同步憑證或 Repo！")
+                                else:
+                                    with st.spinner("🔄 正在更新..."):
+                                        try:
+                                            idx_update = df_map[df_map['SYS#'] == sys_id].index
+                                            df_map.loc[idx_update, 'CSM BASE'] = st.session_state.get(f"t2_edit_base_{sys_id}", "").strip() or "無資料"
+                                            df_map.loc[idx_update, 'CSM TRAY'] = st.session_state.get(f"t2_edit_tray_{sys_id}", "").strip() or "無資料"
+                                            df_map.loc[idx_update, 'FULL SYS'] = st.session_state.get(f"t2_edit_full_{sys_id}", "").strip() or "無資料"
+                                            df_map.loc[idx_update, 'JTAG'] = st.session_state.get(f"t2_edit_jtag_{sys_id}", "無資料")
+                                            df_map.loc[idx_update, 'AOT'] = st.session_state.get(f"t2_edit_aot_{sys_id}", "無資料")
+                                            df_map.loc[idx_update, 'FT'] = st.session_state.get(f"t2_edit_ft_{sys_id}", "無資料")
 
-                                        df_upload = df_map.copy()
-                                        df_upload.rename(columns={"SYS#": "NO."}, inplace=True)
-                                        save_df_to_github(df_upload, file_mapping, file_mapping, f"Update {current_build}#{sys_id} via Streamlit")
-                                        st.cache_data.clear()
-                                        st.success("✅ 成功同步！畫面即將重新載入...")
-                                        time.sleep(1.5)
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"❌ 上傳失敗: {e}")
-                    else:
-                        st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
-        else:
-            st.error(f"⚠️ 找不到資料，請確認輸入是否有誤。")
+                                            df_upload = df_map.copy()
+                                            df_upload.rename(columns={"SYS#": "NO."}, inplace=True)
+                                            save_df_to_github(df_upload, file_mapping, file_mapping, f"Update {current_build}#{sys_id} via Streamlit")
+                                            st.cache_data.clear()
+                                            st.success("✅ 成功同步！畫面即將重新載入...")
+                                            time.sleep(1.5)
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ 上傳失敗: {e}")
+                        else:
+                            st.caption(f"🔍 站點狀態 👉 JTAG: `{row.get('JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
 
 # ==========================================
 # 分頁 3: WIP (STATUS)
@@ -588,20 +588,19 @@ with tab_status:
         else: t3_empty_cnt += 1
         
         if has_notice:
-            dynamic_custom_css_t3 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }}
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}
-            """
+            dynamic_custom_css_t3 += (
+                f'div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }} '
+                f'div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }} '
+            )
         elif state == "fail":
-            dynamic_custom_css_t3 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }}
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}
-            """
+            dynamic_custom_css_t3 += (
+                f'div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }} '
+                f'div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }} '
+            )
             
         if is_selected:
-            dynamic_custom_css_t3 += f"""
-            div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }}
-            """
+            dynamic_custom_css_t3 += f'div[data-testid="stExpanderDetails"]:has(.t3-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }} '
+            
     if dynamic_custom_css_t3: st.markdown(f"<style>{dynamic_custom_css_t3}</style>", unsafe_allow_html=True)
 
     panel_title_t3 = f"🎛️ {current_build} WIP 面板 (綠色: PASS({t3_pass_cnt}) / 黃色: FAIL({t3_fail_cnt}) / 紅色: NOTICE({t3_notice_cnt}) / 灰色: 無資料({t3_empty_cnt}) / 框線放大: 目前選取)"
@@ -871,12 +870,19 @@ with tab_work:
                 is_selected = (sys_val == active_w_add_no)
                 
                 if has_notice:
-                    dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }} div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }}"""
+                    dynamic_custom_css_t4 += (
+                        f'div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ background-color: #dc3545 !important; border-color: #dc3545 !important; color: #ffffff !important; }} '
+                        f'div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button:hover {{ background-color: #c82333 !important; border-color: #bd2130 !important; }} '
+                    )
                 elif state == "fail":
-                    dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }} div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }}"""
+                    dynamic_custom_css_t4 += (
+                        f'div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }} '
+                        f'div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }} '
+                    )
                     
                 if is_selected:
-                    dynamic_custom_css_t4 += f"""div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }}"""
+                    dynamic_custom_css_t4 += f'div[data-testid="stExpanderDetails"]:has(.t4-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button {{ border: 4px solid #0056b3 !important; box-shadow: 0px 0px 8px 3px rgba(0,86,179,0.6) !important; transform: scale(1.15) !important; position: relative !important; z-index: 99 !important; }} '
+                    
             if dynamic_custom_css_t4: st.markdown(f"<style>{dynamic_custom_css_t4}</style>", unsafe_allow_html=True)
 
             with st.expander("🎛️ 點擊展開 NO. 快速選擇面板 (💡 顯示為左側欄選中專案的機台)", expanded=False):
@@ -889,7 +895,6 @@ with tab_work:
                         btn_type = "primary" if state == "pass" else "secondary"
                         btn_cols[idx].button(str(sys_val), key=f"btn_w_add_{sys_val}", on_click=set_add_no, args=(str(sys_val),), type=btn_type)
 
-            # 🛠 這裡已升級為 text_area，讓你自由換行！
             w_desc = st.text_area("📝 事項描述 (支援多行輸入)", height=100)
             
             w_c4, w_c5 = st.columns(2)
@@ -906,7 +911,7 @@ with tab_work:
                 st.rerun()
 
             if w_submitted:
-                if not w_no.strip(): st.error("⚠️ 請填寫或選擇 NO. (系統編號)！")
+                if not w_no.strip(): st.error("⚠️️ 請填寫或選擇 NO. (系統編號)！")
                 elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets: st.error("❌ 尚未設定系統同步憑證或 Repo！")
                 else:
                     with st.spinner("🔄 上傳中..."):
@@ -951,7 +956,6 @@ with tab_work:
             else:
                 export_lines = []
                 for i, (_, r) in enumerate(df_ongoing.iterrows(), 1):
-                    # 處理換行，讓匯出文字依然完美縮排對齊
                     desc_export = str(r.get('事項描述', '')).replace('\n', '\n       ')
                     export_lines.append(f"{i}. {r.get('BUILD', '')}#{r.get('NO.', '')} : {r.get('Station', '')} - {desc_export}")
                 
@@ -968,9 +972,7 @@ with tab_work:
         station_val = row.get('Station', '無資料')
         
         desc_val = str(row.get('事項描述', '無標題'))
-        # 標題欄過濾掉換行，避免破壞排版
         desc_title = desc_val.replace('\n', ' ')
-        # 內文框保留換行，轉為 HTML 的換行標籤
         desc_html = desc_val.replace('\n', '<br>')
         
         date_val = str(row.get('起始日期', '')).strip()
@@ -979,7 +981,6 @@ with tab_work:
         
         with st.expander(display_title, expanded=False):
             is_w_edit = st.toggle("✏️ 進入編輯模式", key=f"w_toggle_{item_id}")
-            # 將這裡的描述顯示區塊升級，支援換行標籤
             st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #004085; background-color: #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #b8daff;'>📝 事項描述：<br>{desc_html}</div>", unsafe_allow_html=True)
             
             item_build_val = str(row.get('BUILD', '')).strip().upper()
@@ -999,7 +1000,6 @@ with tab_work:
                 e_no = st.text_input("NO.", value=row.get('NO.', ''), key=f"e_no_{item_id}")
                 e_station = st.text_input("Station", value=row.get('Station', ''), key=f"e_station_{item_id}")
                 
-                # 🛠 這裡升級為 text_area，讓編輯時也能換行！
                 e_desc = st.text_area("事項描述", value=desc_val, height=100, key=f"e_desc_{item_id}") 
                 e_report = st.text_area("回報狀況", value=row.get('回報狀況', ''), key=f"e_report_{item_id}")
                 
@@ -1057,7 +1057,6 @@ with tab_work:
                     build_no = f"{r.get('BUILD', '')}#{r.get('NO.', '')}"
                     station = r.get('Station', '')
                     
-                    # 處理換行，讓匯出文字依然完美縮排對齊
                     desc_export = str(r.get('事項描述', '')).replace('\n', '\n       ')
                     
                     report_text = str(r.get('回報狀況', '無資料')).strip()
