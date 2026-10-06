@@ -7,6 +7,18 @@ from utils import *  # 導入工具函式
 st.set_page_config(page_title="卡美問題與 SN 查詢", layout="wide")
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
+# 💡 自動覆寫 utils.py 中的 4 Tab 換行設定，適應全新的 5 Tab 架構
+st.markdown("""
+<style>
+button[data-baseweb="tab"]:nth-child(1) { order: 1 !important; }
+button[data-baseweb="tab"]:nth-child(2) { order: 2 !important; }
+button[data-baseweb="tab"]:nth-child(3) { order: 3 !important; }
+button[data-baseweb="tab"]:nth-child(4) { order: 4 !important; }
+div[data-baseweb="tab-list"]::before { content: "" !important; flex-basis: 100% !important; order: 5 !important; height: 10px !important; }
+button[data-baseweb="tab"]:nth-child(5) { order: 6 !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ==========================================
 # ⚙️ 側邊欄：全域 Build 切換器
 # ==========================================
@@ -41,9 +53,85 @@ station_opts_rca = ["無資料", "PASS", "FAIL"]
 sys_status_states, sys_notice_states = get_sys_states(df_map, df_note)
 
 # ==========================================
-# 📑 建立頂部切換分頁 (原生 st.tabs)
+# 📑 建立頂部切換分頁 (加入新的 '搜索' 分頁)
 # ==========================================
-tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔍 SOP", "🔄 Mapping", "📊 WIP", "📋 追踨"])
+tab_search, tab_rca, tab_map, tab_status, tab_work = st.tabs(["🔎 搜索", "🔍 SOP", "🔄 Mapping", "📊 WIP", "📋 追踨"])
+
+# ==========================================
+# 新分頁: 搜索 (Global Search)
+# ==========================================
+with tab_search:
+    st.header("🔎 智慧型全域搜尋")
+    st.markdown("無論目前側邊欄選擇哪個 Build，在此處輸入序號皆可**跨專案**搜尋該機台的完整資訊。")
+    
+    global_search_input = st.text_input("✍️ 請輸入 SYS# 或任一 SN 序號 (CSM BASE, CSM TRAY, FULL SYS)", placeholder="例如: 5, CSM...").strip()
+    
+    if global_search_input:
+        search_target = global_search_input.upper()
+        st.divider()
+        st.markdown(f"### 🔎 搜尋結果: `{search_target}`")
+        found_anything = False
+        
+        for b in build_options:
+            b_map = load_mapping_data(b)
+            if b_map.empty: continue
+            
+            search_val_cleaned = search_target.replace(f"{b}#", "").replace("TS#", "")
+            
+            mask = (b_map['SYS#'].astype(str).str.upper() == search_val_cleaned) | \
+                   (b_map['CSM BASE'].astype(str).str.upper() == search_target) | \
+                   (b_map['CSM TRAY'].astype(str).str.upper() == search_target) | \
+                   (b_map['FULL SYS'].astype(str).str.upper() == search_target)
+            
+            matches = b_map[mask]
+            
+            if not matches.empty:
+                found_anything = True
+                for _, m_row in matches.iterrows():
+                    sys_id = m_row['SYS#']
+                    with st.expander(f"🎯 查獲機台: {b}#{sys_id} (點擊收合詳細資訊)", expanded=True):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown("#### 🔄 關聯序號 (Mapping)")
+                            st.markdown(f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`  \n"
+                                        f"**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`  \n"
+                                        f"**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`")
+                        with c2:
+                            st.markdown("#### 📊 WIP 狀態")
+                            st.markdown(f"**JTAG**: `{m_row.get('JTAG', '無資料')}` ｜ "
+                                        f"**AOT**: `{m_row.get('AOT', '無資料')}` ｜ "
+                                        f"**FT**: `{m_row.get('FT', '無資料')}`")
+                            st.markdown(f"**STATUS**: `{m_row.get('STATUS', '無資料')}`  \n"
+                                        f"**OWNER**: `{m_row.get('OWNER', '無資料')}`  \n"
+                                        f"**Failure BIN**: `{m_row.get('Failure BIN', '無資料')}`")
+                        
+                        st.divider()
+                        
+                        b_note = load_note_data(b)
+                        n_row = b_note[b_note['NO.'] == str(sys_id)]
+                        if not n_row.empty:
+                            n_val = str(n_row['NOTE'].values[0]) if pd.notna(n_row['NOTE'].values[0]) else "無資料"
+                            is_notice = str(n_row['NOTICE'].values[0]).strip()
+                            if is_notice.startswith('1'):
+                                st.error(f"🚨 **特別標註 (NOTICE):** {n_val.replace(chr(10), '  '+chr(10))}")
+                            else:
+                                st.info(f"📝 **備註:** {n_val.replace(chr(10), '  '+chr(10))}")
+                        else:
+                            st.info("📝 **備註:** 無資料")
+                            
+                        render_handover_status(sys_id, b, df_ho, is_editing=False)
+                        
+                        st.markdown("#### 📋 待辦事項 (Ongoing Work Items)")
+                        w_matches = df_work[(df_work['BUILD'] == b) & (df_work['NO.'] == str(sys_id)) & (df_work['工作狀態'] != 'Resolved')]
+                        if w_matches.empty:
+                            st.success("✅ 目前此機台無未結案的追蹤事項")
+                        else:
+                            for _, w_row in w_matches.iterrows():
+                                w_desc = str(w_row.get('事項描述', '')).replace('\n', ' ')
+                                st.warning(f"**[{w_row.get('Station', '無')}]** {w_desc} (負責人: {w_row.get('經手人員', '無')})")
+
+        if not found_anything:
+            st.warning(f"⚠️ 找不到與 `{global_search_input}` 相關的任何機台，請確認序號是否正確。")
 
 # ==========================================
 # 分頁 1: 故障排除 (SOP)
@@ -215,7 +303,7 @@ with tab_rca:
                     rev_text = str(row['REV'])
                     
                     if is_rca_editing:
-                        st.markdown("##### 🏷️ 編輯分類標籤")
+                        st.markdown("##### 🏷 編輯分類標籤")
                         c_st, c_bc = st.columns(2)
                         e_station = c_st.text_input("STATION", value=row.get('STATION', ''), key=f"e_rca_st_{index}")
                         e_bincode = c_bc.text_input("BIN_CODE", value=row.get('BIN_CODE', ''), key=f"e_rca_bc_{index}")
@@ -279,7 +367,7 @@ with tab_rca:
                         if meta_info: st.caption(" | ".join(meta_info))
 
 # ==========================================
-# 分頁 2: Mapping
+# 分頁 2: Mapping (原本的)
 # ==========================================
 with tab_map:
     col_title, col_upload = st.columns([0.6, 0.4])
@@ -357,7 +445,6 @@ with tab_map:
     current_search_val = st.session_state.get("map_search_input", "").strip()
     active_sys_numbers = set()
     
-    # 💡 [重大修復] 安全判斷搜尋欄位名稱，徹底避免 KeyError！
     if current_search_val and not df_map.empty:
         query_val = current_search_val
         if current_search_col and current_search_col.endswith("#"):
@@ -366,7 +453,6 @@ with tab_map:
         else:
             search_col_internal = current_search_col
             
-        # 再加一層防呆：如果選擇的欄位在資料表中存在才執行查詢
         if search_col_internal in df_map.columns:
             temp_df = df_map[df_map[search_col_internal] == query_val]
             active_sys_numbers = set(temp_df["SYS#"].dropna().astype(str).tolist())
@@ -414,7 +500,6 @@ with tab_map:
         with col2: search_val = st.text_input(f"✍️ 請輸入 {search_col}", key="map_search_input").strip()
             
     if search_val and not df_map.empty:
-        # 💡 [重大修復] 同理避免 KeyError 
         if search_col and search_col.endswith("#"):
             search_col_internal = "SYS#"
             search_val_proc = search_val.upper().replace(search_col, "").replace(f"{current_build}#", "").replace("TS#", "").strip()
@@ -859,7 +944,7 @@ with tab_work:
             with w_c3:
                 station_opts = ["MGMT_JTAG", "MGMT_FT", "AOT", "SYSTEM_FT", "OTHER", "自訂 (請在下方輸入)"]
                 sel_station = st.selectbox("Station", station_opts, index=2)
-                if sel_station in ["OTHER", "自訂 (請在下方輸入)"]: w_station = st.text_input("✍️ 請輸入自訂 Station", key="w_custom_station")
+                if sel_station in ["OTHER", "自訂 (請在下方輸入)"]: w_station = st.text_input("✍️️ 請輸入自訂 Station", key="w_custom_station")
                 else: w_station = sel_station
                     
             dynamic_custom_css_t4 = ""
@@ -911,7 +996,7 @@ with tab_work:
                 st.rerun()
 
             if w_submitted:
-                if not w_no.strip(): st.error("⚠️️ 請填寫或選擇 NO. (系統編號)！")
+                if not w_no.strip(): st.error("⚠ 請填寫或選擇 NO. (系統編號)！")
                 elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets: st.error("❌ 尚未設定系統同步憑證或 Repo！")
                 else:
                     with st.spinner("🔄 上傳中..."):
