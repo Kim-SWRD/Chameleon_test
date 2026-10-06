@@ -10,13 +10,26 @@ st.markdown(get_custom_css(), unsafe_allow_html=True)
 # ==========================================
 # ⚙️ 側邊欄：全域 Build 切換器
 # ==========================================
-st.sidebar.title("⚙️ 系統設定")
+st.sidebar.title("⚙️️ 系統設定")
 build_options = ["TS2", "TS3", "TS4"] # 可以在這裡隨意擴充未來可能出現的 Build
 current_build = st.sidebar.selectbox("📌 選擇目前專案 Build", build_options, index=0)
 st.sidebar.divider()
 st.sidebar.info(f"👉 目前選中：**{current_build}**\n\n系統將自動存取 `{current_build}_mapping.xlsx` 與 `{current_build}_note.xlsx`")
 
-# --- 初始化 Session State ---
+# --- 初始化 Session State 與 Build 切換防呆 ---
+if "current_build_state" not in st.session_state: 
+    st.session_state["current_build_state"] = current_build
+
+# 💡 核心修復：當使用者切換 Build 時，清空所有與舊 Build 綁定的搜尋與選擇狀態，避免 Streamlit 找不到選項而崩潰斷線！
+if st.session_state["current_build_state"] != current_build:
+    st.session_state["current_build_state"] = current_build
+    st.session_state["map_col"] = f"{current_build}#"
+    st.session_state["map_search_input"] = ""
+    st.session_state["status_active_sys"] = ""
+    st.session_state["w_add_no_input"] = ""
+    if "bulk_notice_sys" in st.session_state:
+        st.session_state["bulk_notice_sys"] = []
+
 if "map_col" not in st.session_state: st.session_state["map_col"] = f"{current_build}#"
 if "map_search_input" not in st.session_state: st.session_state["map_search_input"] = ""
 if "status_active_sys" not in st.session_state: st.session_state["status_active_sys"] = ""
@@ -216,137 +229,4 @@ with tab_rca:
                     
                     if is_rca_editing:
                         st.markdown("##### 🏷️ 編輯分類標籤")
-                        c_st, c_bc = st.columns(2)
-                        e_station = c_st.text_input("STATION", value=row.get('STATION', ''), key=f"e_rca_st_{index}")
-                        e_bincode = c_bc.text_input("BIN_CODE", value=row.get('BIN_CODE', ''), key=f"e_rca_bc_{index}")
-                        
-                        c_bin, c_sub = st.columns(2)
-                        e_bin = c_bin.text_input("BIN", value=row.get('BIN', ''), key=f"e_rca_b_{index}")
-                        e_subbin = c_sub.text_input("SUB_BIN", value=row.get('SUB_BIN', ''), key=f"e_rca_sb_{index}")
-                        
-                        st.markdown("##### 📝 編輯對策內容")
-                        e_cause = st.text_area("🚨 可能原因 (Cause)", value=cause_text, key=f"e_rca_c_{index}")
-                        e_sol = st.text_area("✅ 解決方案 (Solution)", value=solution_text, key=f"e_rca_s_{index}")
-                        
-                        c_log, c_rev = st.columns(2)
-                        e_log = c_log.text_input("Log", value=log_text if log_text != "無資料" else "", key=f"e_rca_l_{index}")
-                        e_rev = c_rev.text_input("REV", value=rev_text if rev_text != "無資料" else "", key=f"e_rca_r_{index}")
-                        
-                        st.write("")
-                        col_save, col_del = st.columns(2)
-                        with col_save:
-                            if st.button("💾 儲存修改並同步", key=f"rca_save_{index}", type="primary", use_container_width=True):
-                                if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                    st.error("❌ 尚未設定系統同步憑證或 Repo！")
-                                else:
-                                    with st.spinner("🔄 更新中..."):
-                                        df_rca.loc[index, 'STATION'] = e_station.strip() or "無資料"
-                                        df_rca.loc[index, 'BIN_CODE'] = e_bincode.strip() or "無資料"
-                                        df_rca.loc[index, 'BIN'] = e_bin.strip() or "無資料"
-                                        df_rca.loc[index, 'SUB_BIN'] = e_subbin.strip() or "無資料"
-                                        df_rca.loc[index, 'Possible Cause'] = e_cause.strip() or "無資料"
-                                        df_rca.loc[index, 'Solution'] = e_sol.strip() or "無資料"
-                                        df_rca.loc[index, 'Ref Log'] = e_log.strip() or "無資料"
-                                        df_rca.loc[index, 'REV'] = e_rev.strip() or "無資料"
-                                        
-                                        save_df_to_github(df_rca, "RCA.xlsx", "RCA.xlsx", f"Update SOP index {index} via Streamlit")
-                                        st.cache_data.clear()
-                                        st.success("✅ 已儲存！畫面即將重新載入...")
-                                        time.sleep(1.5)
-                                        st.rerun()
-                        with col_del:
-                            if st.button("🗑 刪除此筆紀錄", key=f"rca_del_{index}", type="secondary", use_container_width=True):
-                                if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                    st.error("❌ 尚未設定系統同步憑證或 Repo！")
-                                else:
-                                    with st.spinner("🔄 刪除中..."):
-                                        df_rca_deleted = df_rca.drop(index)
-                                        save_df_to_github(df_rca_deleted, "RCA.xlsx", "RCA.xlsx", f"Delete SOP index {index} via Streamlit")
-                                        st.cache_data.clear()
-                                        st.success("✅ 已刪除！畫面即將重新載入...")
-                                        time.sleep(1.5)
-                                        st.rerun()
-                    else:
-                        display_cause = cause_text.replace('\n', '  \n')
-                        display_sol = solution_text.replace('\n', '  \n')
-                        
-                        st.error(f"**🚨 可能原因 (Cause):**  \n{display_cause}")
-                        st.success(f"**✅ 解決方案 (Solution):**  \n{display_sol}")
-                        
-                        meta_info = []
-                        if log_text != "無資料": meta_info.append(f"**Log:** {log_text}")
-                        if rev_text != "無資料": meta_info.append(f"**REV:** {rev_text}")
-                        if meta_info: st.caption(" | ".join(meta_info))
-
-# ==========================================
-# 分頁 2: Mapping
-# ==========================================
-with tab_map:
-    col_title, col_upload = st.columns([0.6, 0.4])
-    with col_title:
-        st.header(f"🔄 Mapping ({current_build})")
-    with col_upload:
-        with st.expander(f"📤 上傳 / 下載 {file_mapping}", expanded=False):
-            try:
-                with open(file_mapping, "rb") as f:
-                    st.download_button(label="📥 下載目前 Mapping 檔", data=f, file_name=file_mapping, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-            except FileNotFoundError: 
-                st.warning(f"目前伺服器上尚未產生 {file_mapping}")
-                
-            st.divider()
-            uploaded_file = st.file_uploader("上傳新的 Mapping 檔案 (.xlsx)", type=["xlsx"])
-            if uploaded_file:
-                try:
-                    df_test = pd.read_excel(uploaded_file, dtype=str)
-                    rename_test = {}
-                    for col in df_test.columns:
-                        c_up = str(col).upper()
-                        if "NO." in c_up or f"{current_build}#" in c_up or "TS2#" in c_up: rename_test[col] = "NO."
-                        elif "CSM BASE" in c_up or "CSM_BASE" in c_up: rename_test[col] = "CSM BASE"
-                        elif "CSM TRAY" in c_up or "CSM_TRAY" in c_up: rename_test[col] = "CSM TRAY"
-                        elif "FULL SYS" in c_up or "FULL_SYS" in c_up: rename_test[col] = "FULL SYS"
-                    df_test.rename(columns=rename_test, inplace=True)
-                    
-                    if 'NO.' not in df_test.columns:
-                        st.error("❌ 嚴重錯誤：找不到 'NO.' 欄位，無法解析此檔案。")
-                    else:
-                        missing_sn = [req_col for req_col in ['CSM BASE', 'CSM TRAY', 'FULL SYS'] if req_col not in df_test.columns]
-                        st.success(f"✅ 驗證通過！共讀取到 {len(df_test)} 筆資料。")
-                        if missing_sn: st.warning(f"⚠️ 警告：檔案缺少以下欄位 ({', '.join(missing_sn)})，仍可強制上傳。")
-                            
-                        if st.button("🚀 確認上傳並覆蓋", use_container_width=True, type="primary"):
-                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
-                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
-                            else:
-                                with st.spinner("🔄 上傳中..."):
-                                    uploaded_file.seek(0)
-                                    excel_bytes = uploaded_file.read()
-                                    with open(file_mapping, "wb") as f: f.write(excel_bytes)
-                                    repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
-                                    try:
-                                        contents = repo.get_contents(file_mapping)
-                                        repo.update_file(contents.path, f"Update {file_mapping} via Streamlit", excel_bytes, contents.sha)
-                                    except Exception:
-                                        repo.create_file(file_mapping, f"Create {file_mapping} via Streamlit", excel_bytes)
-                                    st.cache_data.clear()
-                                    st.success("✅ 檔案已成功更新！畫面即將重新載入...")
-                                    time.sleep(1.5)
-                                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ 解析檔案失敗：{e}")
-
-    def set_sys_search(num_str):
-        st.session_state["map_col"] = f"{current_build}#"
-        st.session_state["map_search_input"] = num_str
-
-    def get_sn_count(row):
-        cnt = 0
-        for col in ['CSM BASE', 'CSM TRAY', 'FULL SYS']:
-            val = row.get(col, "無資料")
-            if pd.notna(val) and str(val).strip() not in ["", "無資料", "nan", "NaN"]: cnt += 1
-        return cnt
-
-    sys_sn_counts = {}
-    if not df_map.empty:
-        for idx, row in df_map.iterrows():
-            sys_id = str(row['SYS#']).strip()
+                        c_st, c_bc = st
