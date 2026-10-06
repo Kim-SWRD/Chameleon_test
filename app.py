@@ -121,7 +121,7 @@ with tab_rca:
             col_rca_sub, col_rca_can = st.columns(2)
             if col_rca_sub.button("💾 儲存並同步", type="primary", use_container_width=True):
                 if not new_bincode.strip() and not new_bin.strip(): 
-                    st.error("⚠ 請至少填寫 BIN_CODE 或 BIN！")
+                    st.error("⚠️ 請至少填寫 BIN_CODE 或 BIN！")
                 elif "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
                     st.error("❌ 尚未設定系統同步憑證或 Repo！")
                 else:
@@ -350,38 +350,3 @@ with tab_map:
     if not df_map.empty:
         for idx, row in df_map.iterrows():
             sys_id = str(row['SYS#']).strip()
-            cnt = get_sn_count(row)
-            if sys_id not in sys_sn_counts or cnt > sys_sn_counts[sys_id]: sys_sn_counts[sys_id] = cnt
-
-    current_search_col = st.session_state.get("map_col", f"{current_build}#")
-    current_search_val = st.session_state.get("map_search_input", "").strip()
-    active_sys_numbers = set()
-    
-    if current_search_val and not df_map.empty:
-        query_val = current_search_val
-        # 💡 修正 1: 防止 session_state 殘留他版 (如 TS2#) 導致 KeyError
-        if "#" in current_search_col:
-            query_val = query_val.upper().replace(current_search_col, "").replace(f"{current_build}#", "").replace("TS#", "").strip()
-            search_col_internal = "SYS#"
-        else:
-            search_col_internal = current_search_col
-            
-        # 💡 修正 2: 增加防呆，確保欄位真的存在於當前的 df_map 中
-        if search_col_internal in df_map.columns:
-            temp_df = df_map[df_map[search_col_internal] == query_val]
-            active_sys_numbers = set(temp_df["SYS#"].dropna().astype(str).tolist())
-
-    dynamic_yellow_css_t2 = ""
-    full_cnt, partial_cnt, empty_cnt = 0, 0, 0
-    
-    for idx, sys_val in enumerate(valid_sys_list):
-        c = sys_sn_counts.get(sys_val, 0)
-        is_selected = (sys_val in active_sys_numbers)
-        
-        if c == 3: full_cnt += 1
-        elif c in [1, 2]: partial_cnt += 1
-        else: empty_cnt += 1
-        
-        if c in [1, 2]:
-            dynamic_yellow_css_t2 += f"""
-            div[data-testid="stExpanderDetails"]:has
