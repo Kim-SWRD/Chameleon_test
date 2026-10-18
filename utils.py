@@ -50,7 +50,7 @@ def get_custom_css():
         font-size: 13px !important; font-weight: 700 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; 
     }
 
-    /* 確保 Code Block 右上角的複製按鈕隨時顯示 (保留給短 SN 序號使用) */
+    /* 確保 Code Block 右上角的複製按鈕隨時顯示 */
     div[data-testid="stCodeBlock"] button { opacity: 1 !important; visibility: visible !important; display: inline-flex !important; }
 
     /* 客製化追蹤問題 (Expander) 標題內的色塊顏色 */
@@ -59,6 +59,21 @@ def get_custom_css():
     div[data-testid="stExpander"] summary p span:nth-of-type(3) { background-color: #f1f3f5 !important; color: #6c757d !important; border-radius: 4px !important; padding: 2px 8px !important; font-size: 0.85em !important; margin-left: 6px !important; }
     </style>
     """
+
+# 新增：動態讀取專案清單 (如果尚未建立，會自動退回預設的三個專案)
+@st.cache_data(ttl=60)
+def load_build_list():
+    default_df = pd.DataFrame([
+        {"Project_Name": "TS2", "Mapping_File": "TS2_mapping.xlsx", "Note_File": "TS2_note.xlsx"},
+        {"Project_Name": "TS3", "Mapping_File": "TS3_mapping.xlsx", "Note_File": "TS3_note.xlsx"},
+        {"Project_Name": "TS4", "Mapping_File": "TS4_mapping.xlsx", "Note_File": "TS4_note.xlsx"}
+    ])
+    try:
+        df = pd.read_excel("Build_list.xlsx", dtype=str)
+        if df.empty or "Project_Name" not in df.columns: return default_df
+        return df
+    except FileNotFoundError:
+        return default_df
 
 @st.cache_data(ttl=60)
 def load_rca_data():
@@ -69,10 +84,10 @@ def load_rca_data():
     except FileNotFoundError:
         return pd.DataFrame()
 
+# 變更：改為吃「實體檔案名稱」，不自作主張加上 _mapping.xlsx
 @st.cache_data(ttl=60)
-def load_mapping_data(build_name):
-    filename = f"{build_name}_mapping.xlsx"
-    empty_df = pd.DataFrame(columns=["SYS#", "CSM BASE", "CSM TRAY", "FULL SYS", "JTAG", "AOT", "FT", "STATUS", "OWNER", "Failure BIN"])
+def load_mapping_data(filename):
+    empty_df = pd.DataFrame(columns=["SYS#", "BUILD", "CSM BASE", "CSM TRAY", "FULL SYS", "JTAG", "AOT", "FT", "STATUS", "OWNER", "Failure BIN"])
     
     try: df = pd.read_excel(filename, dtype=str)
     except FileNotFoundError: return empty_df
@@ -80,7 +95,8 @@ def load_mapping_data(build_name):
     rename_dict = {}
     for col in df.columns:
         col_upper = str(col).upper()
-        if "NO." in col_upper or f"{build_name}#" in col_upper or "TS2#" in col_upper or "TS3#" in col_upper: rename_dict[col] = "NO."
+        if "NO." in col_upper or "SYS#" in col_upper or "TS2#" in col_upper or "TS3#" in col_upper: rename_dict[col] = "NO."
+        elif "BUILD" in col_upper: rename_dict[col] = "BUILD"
         elif "CSM BASE" in col_upper or "CSM_BASE" in col_upper: rename_dict[col] = "CSM BASE"
         elif "CSM TRAY" in col_upper or "CSM_TRAY" in col_upper: rename_dict[col] = "CSM TRAY"
         elif "FULL SYS" in col_upper or "FULL_SYS" in col_upper: rename_dict[col] = "FULL SYS"
@@ -103,8 +119,7 @@ def load_mapping_data(build_name):
     return df
 
 @st.cache_data(ttl=60)
-def load_note_data(build_name):
-    filename = f"{build_name}_note.xlsx"
+def load_note_data(filename):
     try: df = pd.read_excel(filename, dtype=str)
     except FileNotFoundError: return pd.DataFrame(columns=["NO.", "NOTE", "NOTICE", "BUILD"])
         
@@ -156,7 +171,6 @@ def render_handover_status(sys_id, build_name, df_ho, is_editing=False):
     if matched_ho.empty: st.caption("（無相關交接紀錄）")
     else:
         ho_desc = "\n---\n".join(matched_ho['Failure Description'].astype(str).tolist())
-        # 放棄 st.code，改用 st.info 保證手機上完美換行
         ho_desc_md = ho_desc.replace('\n', '  \n')
         st.info(ho_desc_md)
 
