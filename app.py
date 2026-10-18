@@ -719,7 +719,7 @@ with tab_map:
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
-                        st.caption(f"🔍 站點狀態 👉 CSM_JTAG: `{row.get('CSM_JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
+                        st.caption(f"🔍 CSM_JTAG: `{row.get('CSM_JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
             if search_val: st.error(f"⚠️ 找不到該筆資料。")
 
