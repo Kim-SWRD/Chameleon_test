@@ -74,7 +74,6 @@ def load_build_list():
     except FileNotFoundError:
         return default_df
 
-# 讀取 CSV Master Mapping 檔
 @st.cache_data(ttl=60)
 def load_master_mapping():
     try: 
@@ -82,6 +81,17 @@ def load_master_mapping():
         df.fillna("無資料", inplace=True)
         return df
     except FileNotFoundError: 
+        return pd.DataFrame(columns=['BUILD', 'NO.', 'MGMT BASE', 'CSM BASE', 'CSM TRAY', 'FULL SYS'])
+
+# 新增：讀取 Build_PN.csv 的資料
+@st.cache_data(ttl=60)
+def load_build_pn_data():
+    try:
+        df = pd.read_csv("Build_PN.csv", dtype=str)
+        df.fillna("無資料", inplace=True)
+        df.rename(columns=lambda x: str(x).strip().upper(), inplace=True)
+        return df
+    except FileNotFoundError:
         return pd.DataFrame(columns=['BUILD', 'NO.', 'MGMT BASE', 'CSM BASE', 'CSM TRAY', 'FULL SYS'])
 
 @st.cache_data(ttl=60)
@@ -245,3 +255,38 @@ def get_sys_states(df_map, df_note):
             if n_val.endswith('.0'): n_val = n_val[:-2]
             notice_states[sys_id] = n_val
     return status_states, notice_states
+
+# 新增：從 PN DataFrame 反查出對應的 PN
+def get_pn_mapping(build_name, sys_no, df_pn):
+    pns = {'MGMT BASE': '', 'CSM BASE': '', 'CSM TRAY': '', 'FULL SYS': ''}
+    if df_pn.empty or 'BUILD' not in df_pn.columns: return pns
+
+    b_match = df_pn[df_pn['BUILD'].astype(str).str.upper() == str(build_name).upper()]
+    if b_match.empty: return pns
+
+    target_row = None
+    if 'NO.' in b_match.columns:
+        no_match = b_match[(b_match['NO.'].astype(str) == str(sys_no))]
+        if not no_match.empty:
+            target_row = no_match.iloc[0]
+        else:
+            # 找預設例外 (空值、ALL、無資料)
+            def_match = b_match[(b_match['NO.'].isna()) | (b_match['NO.'].astype(str).str.strip() == '') | (b_match['NO.'].astype(str).str.upper() == 'ALL') | (b_match['NO.'].astype(str).str.upper() == '無資料')]
+            if not def_match.empty:
+                target_row = def_match.iloc[0]
+            else:
+                target_row = b_match.iloc[0]
+    else:
+        target_row = b_match.iloc[0]
+
+    if target_row is not None:
+        for col in pns.keys():
+            if col in df_pn.columns:
+                val = target_row.get(col, '')
+            elif f"{col} PN" in df_pn.columns:
+                val = target_row.get(f"{col} PN", '')
+            else:
+                val = ''
+            if pd.notna(val) and str(val).strip() not in ['', 'nan', '無資料']:
+                pns[col] = str(val).strip()
+    return pns

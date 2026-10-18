@@ -77,8 +77,8 @@ df_rca = load_rca_data()
 df_ho = load_handover_data()
 df_work = load_work_item_data()
 df_master = load_master_mapping()
+df_build_pn = load_build_pn_data()
 
-# 輔助函式：提取 Master 資料並優先蓋過顯示 (依據 BUILD 與 NO.)
 def get_master_sns(build_name, sys_no, df_m, orig_row):
     res = {
         'MGMT BASE': '無資料',
@@ -101,6 +101,9 @@ def get_master_sns(build_name, sys_no, df_m, orig_row):
                     if pd.notna(val) and str(val).strip() not in ['', '無資料', 'nan']:
                         res[col] = str(val).strip()
     return res
+
+# HTML PN 排版標籤
+fmt_pn = lambda pn: f" <span style='background-color:#ffe0b2; color:#e65100; padding:2px 6px; border-radius:4px; font-size:0.85em; font-weight:bold;'>PN: {pn}</span>" if pn else ""
 
 df_map_full = load_mapping_data(file_mapping)
 if 'BUILD' in df_map_full.columns:
@@ -153,7 +156,6 @@ with tab_search:
             
             search_val_cleaned = search_target.replace(f"{b}#", "").replace("TS#", "")
             
-            # 從 master 檔案找符合的 NO.
             sys_ids_from_master = []
             if not df_master.empty and 'BUILD' in df_master.columns:
                 sys_ids_from_master = df_master[
@@ -179,15 +181,16 @@ with tab_search:
                 for _, m_row in matches.iterrows():
                     sys_id = m_row['SYS#']
                     m_sns = get_master_sns(b, sys_id, df_master, m_row)
+                    pns = get_pn_mapping(b, sys_id, df_build_pn)
                     
                     with st.expander(f"🎯 查獲機台: {b}#{sys_id} (點擊收合詳細資訊)", expanded=True):
                         c1, c2 = st.columns(2)
                         with c1:
                             st.markdown("#### 🔄 關聯序號 (Mapping)")
-                            st.markdown(f"**MGMT BASE**: `{m_sns['MGMT BASE']}`  \n"
-                                        f"**CSM BASE**: `{m_sns['CSM BASE']}`  \n"
-                                        f"**CSM TRAY**: `{m_sns['CSM TRAY']}`  \n"
-                                        f"**FULL SYS**: `{m_sns['FULL SYS']}`")
+                            st.markdown(f"**MGMT BASE**: `{m_sns['MGMT BASE']}`{fmt_pn(pns['MGMT BASE'])}  \n"
+                                        f"**CSM BASE**: `{m_sns['CSM BASE']}`{fmt_pn(pns['CSM BASE'])}  \n"
+                                        f"**CSM TRAY**: `{m_sns['CSM TRAY']}`{fmt_pn(pns['CSM TRAY'])}  \n"
+                                        f"**FULL SYS**: `{m_sns['FULL SYS']}`{fmt_pn(pns['FULL SYS'])}", unsafe_allow_html=True)
                         with c2:
                             st.markdown("#### 📊 WIP 狀態")
                             st.markdown(f"**CSM_JTAG**: `{m_row.get('CSM_JTAG', '無資料')}` ｜ "
@@ -496,6 +499,45 @@ with tab_map:
                 except Exception as e:
                     st.error(f"❌ 解析檔案失敗：{e}")
 
+        # 新增 Build_PN.csv (全域共用 PN 對應檔) 的上下傳介面
+        with st.expander("📤 上傳 / 下載 共用 PN 對應 (Build_PN.csv)", expanded=False):
+            try:
+                with open("Build_PN.csv", "rb") as f:
+                    st.download_button(label="📥 下載目前 Build_PN.csv", data=f, file_name="Build_PN.csv", mime="text/csv", use_container_width=True)
+            except FileNotFoundError:
+                st.warning("目前伺服器上尚未產生 Build_PN.csv")
+
+            st.divider()
+            uploaded_pn = st.file_uploader("上傳新的 Build_PN.csv", type=["csv"], key="upload_pn")
+            if uploaded_pn:
+                try:
+                    df_pn_test = pd.read_csv(uploaded_pn, dtype=str)
+                    missing_pn_cols = [c for c in ['BUILD'] if c not in [str(x).upper() for x in df_pn_test.columns]]
+                    if missing_pn_cols:
+                        st.error(f"❌ 嚴重錯誤：找不到 {', '.join(missing_pn_cols)} 欄位。")
+                    else:
+                        st.success(f"✅ 驗證通過！共讀取到 {len(df_pn_test)} 筆 PN 對應資料。")
+                        if st.button("🚀 確認上傳並覆蓋", use_container_width=True, type="primary", key="btn_upload_pn"):
+                            if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
+                                st.error("❌ 尚未設定系統同步憑證或 Repo！")
+                            else:
+                                with st.spinner("🔄 上傳中..."):
+                                    uploaded_pn.seek(0)
+                                    pn_bytes = uploaded_pn.read()
+                                    with open("Build_PN.csv", "wb") as f: f.write(pn_bytes)
+                                    repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+                                    try:
+                                        contents = repo.get_contents("Build_PN.csv")
+                                        repo.update_file(contents.path, "Update Build_PN.csv via Streamlit", pn_bytes, contents.sha)
+                                    except Exception:
+                                        repo.create_file("Build_PN.csv", "Create Build_PN.csv via Streamlit", pn_bytes)
+                                    st.cache_data.clear()
+                                    st.success("✅ 檔案已成功更新！畫面即將重新載入...")
+                                    time.sleep(1.5)
+                                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 解析檔案失敗：{e}")
+
         # 原本各自專案的 Excel mapping 檔
         with st.expander(f"📤 上傳 / 下載 {file_mapping}", expanded=False):
             try:
@@ -656,6 +698,7 @@ with tab_map:
             for idx, row in match_df.iterrows():
                 sys_id = row['SYS#']
                 m_sns = get_master_sns(current_build, sys_id, df_master, row)
+                pns = get_pn_mapping(current_build, sys_id, df_build_pn)
                 
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
@@ -664,18 +707,18 @@ with tab_map:
                     
                     c0, c1, c2, c3 = st.columns(4)
                     with c0:
-                        st.markdown("**MGMT BASE**")
+                        st.markdown(f"**MGMT BASE**{fmt_pn(pns['MGMT BASE'])}", unsafe_allow_html=True)
                         st.code(m_sns['MGMT BASE'], language="plaintext")
                     with c1:
-                        st.markdown("**CSM BASE**")
+                        st.markdown(f"**CSM BASE**{fmt_pn(pns['CSM BASE'])}", unsafe_allow_html=True)
                         if is_editing: st.text_input("CSM BASE", value=m_sns['CSM BASE'], label_visibility="collapsed", key=f"t2_edit_base_{sys_id}")
                         else: st.code(m_sns['CSM BASE'], language="plaintext")
                     with c2:
-                        st.markdown("**CSM TRAY**")
+                        st.markdown(f"**CSM TRAY**{fmt_pn(pns['CSM TRAY'])}", unsafe_allow_html=True)
                         if is_editing: st.text_input("CSM TRAY", value=m_sns['CSM TRAY'], label_visibility="collapsed", key=f"t2_edit_tray_{sys_id}")
                         else: st.code(m_sns['CSM TRAY'], language="plaintext")
                     with c3:
-                        st.markdown("**FULL SYS**")
+                        st.markdown(f"**FULL SYS**{fmt_pn(pns['FULL SYS'])}", unsafe_allow_html=True)
                         if is_editing: st.text_input("FULL SYS", value=m_sns['FULL SYS'], label_visibility="collapsed", key=f"t2_edit_full_{sys_id}")
                         else: st.code(m_sns['FULL SYS'], language="plaintext")
                     
@@ -719,7 +762,7 @@ with tab_map:
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
-                        st.caption(f"🔍 CSM_JTAG: `{row.get('CSM_JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
+                        st.caption(f"🔍 站點狀態 👉 CSM_JTAG: `{row.get('CSM_JTAG', '無資料')}` | AOT: `{row.get('AOT', '無資料')}` | FT: `{row.get('FT', '無資料')}`")
         else:
             if search_val: st.error(f"⚠️ 找不到該筆資料。")
 
@@ -897,6 +940,7 @@ with tab_status:
                 if val_notice.endswith('.0'): val_notice = val_notice[:-2]
                 
                 m_sns = get_master_sns(current_build, sys_id, df_master, row)
+                pns = get_pn_mapping(current_build, sys_id, df_build_pn)
                 
                 with st.container(border=True):
                     c_title, c_toggle = st.columns([0.7, 0.3], vertical_alignment="center")
@@ -917,10 +961,10 @@ with tab_status:
 
                     if is_editing:
                         st.markdown(
-                            f"**MGMT BASE**: <code style='font-size: 18px;'>{m_sns['MGMT BASE']}</code><br>"
-                            f"**CSM BASE**: <code style='font-size: 18px;'>{m_sns['CSM BASE']}</code><br>"
-                            f"**CSM TRAY**: <code style='font-size: 18px;'>{m_sns['CSM TRAY']}</code><br>"
-                            f"**FULL SYS**: <code style='font-size: 18px;'>{m_sns['FULL SYS']}</code>",
+                            f"**MGMT BASE**: <code style='font-size: 18px;'>{m_sns['MGMT BASE']}</code>{fmt_pn(pns['MGMT BASE'])}<br>"
+                            f"**CSM BASE**: <code style='font-size: 18px;'>{m_sns['CSM BASE']}</code>{fmt_pn(pns['CSM BASE'])}<br>"
+                            f"**CSM TRAY**: <code style='font-size: 18px;'>{m_sns['CSM TRAY']}</code>{fmt_pn(pns['CSM TRAY'])}<br>"
+                            f"**FULL SYS**: <code style='font-size: 18px;'>{m_sns['FULL SYS']}</code>{fmt_pn(pns['FULL SYS'])}",
                             unsafe_allow_html=True
                         )
                         st.markdown("#### 🔍 站點狀態")
@@ -994,10 +1038,10 @@ with tab_status:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
                         st.markdown(
-                            f"**MGMT BASE**: <code style='font-size: 18px;'>{m_sns['MGMT BASE']}</code><br>"
-                            f"**CSM BASE**: <code style='font-size: 18px;'>{m_sns['CSM BASE']}</code><br>"
-                            f"**CSM TRAY**: <code style='font-size: 18px;'>{m_sns['CSM TRAY']}</code><br>"
-                            f"**FULL SYS**: <code style='font-size: 18px;'>{m_sns['FULL SYS']}</code>",
+                            f"**MGMT BASE**: <code style='font-size: 18px;'>{m_sns['MGMT BASE']}</code>{fmt_pn(pns['MGMT BASE'])}<br>"
+                            f"**CSM BASE**: <code style='font-size: 18px;'>{m_sns['CSM BASE']}</code>{fmt_pn(pns['CSM BASE'])}<br>"
+                            f"**CSM TRAY**: <code style='font-size: 18px;'>{m_sns['CSM TRAY']}</code>{fmt_pn(pns['CSM TRAY'])}<br>"
+                            f"**FULL SYS**: <code style='font-size: 18px;'>{m_sns['FULL SYS']}</code>{fmt_pn(pns['FULL SYS'])}",
                             unsafe_allow_html=True
                         )
                         st.markdown(f"🔍 **CSM_JTAG**: `{row.get('CSM_JTAG', '無資料')}` ｜ **AOT**: `{row.get('AOT', '無資料')}` ｜ **FT**: `{row.get('FT', '無資料')}`")
@@ -1231,8 +1275,15 @@ with tab_work:
                     if not match_df.empty:
                         m_row = match_df.iloc[0]
                         m_sns = get_master_sns(item_build_val, cross_ref_no, df_master, m_row)
+                        pns = get_pn_mapping(item_build_val, cross_ref_no, df_build_pn)
                         
-                        st.markdown(f"**MGMT BASE**: `{m_sns['MGMT BASE']}`  \n**CSM BASE**: `{m_sns['CSM BASE']}`  \n**CSM TRAY**: `{m_sns['CSM TRAY']}`  \n**FULL SYS**: `{m_sns['FULL SYS']}`")
+                        st.markdown(
+                            f"**MGMT BASE**: `{m_sns['MGMT BASE']}`{fmt_pn(pns['MGMT BASE'])}  \n"
+                            f"**CSM BASE**: `{m_sns['CSM BASE']}`{fmt_pn(pns['CSM BASE'])}  \n"
+                            f"**CSM TRAY**: `{m_sns['CSM TRAY']}`{fmt_pn(pns['CSM TRAY'])}  \n"
+                            f"**FULL SYS**: `{m_sns['FULL SYS']}`{fmt_pn(pns['FULL SYS'])}",
+                            unsafe_allow_html=True
+                        )
                         st.markdown(f"**CSM_JTAG**: `{m_row.get('CSM_JTAG', '無資料')}` ｜ **AOT**: `{m_row.get('AOT', '無資料')}` ｜ **FT**: `{m_row.get('FT', '無資料')}`")
                         st.divider()
             
@@ -1341,8 +1392,15 @@ with tab_work:
                     if not match_df.empty:
                         m_row = match_df.iloc[0]
                         m_sns = get_master_sns(item_build_val, cross_ref_no, df_master, m_row)
+                        pns = get_pn_mapping(item_build_val, cross_ref_no, df_build_pn)
                         
-                        st.markdown(f"**MGMT BASE**: `{m_sns['MGMT BASE']}`  \n**CSM BASE**: `{m_sns['CSM BASE']}`  \n**CSM TRAY**: `{m_sns['CSM TRAY']}`  \n**FULL SYS**: `{m_sns['FULL SYS']}`")
+                        st.markdown(
+                            f"**MGMT BASE**: `{m_sns['MGMT BASE']}`{fmt_pn(pns['MGMT BASE'])}  \n"
+                            f"**CSM BASE**: `{m_sns['CSM BASE']}`{fmt_pn(pns['CSM BASE'])}  \n"
+                            f"**CSM TRAY**: `{m_sns['CSM TRAY']}`{fmt_pn(pns['CSM TRAY'])}  \n"
+                            f"**FULL SYS**: `{m_sns['FULL SYS']}`{fmt_pn(pns['FULL SYS'])}",
+                            unsafe_allow_html=True
+                        )
                         st.markdown(f"**CSM_JTAG**: `{m_row.get('CSM_JTAG', '無資料')}` ｜ **AOT**: `{m_row.get('AOT', '無資料')}` ｜ **FT**: `{m_row.get('FT', '無資料')}`")
                         st.divider()
             
