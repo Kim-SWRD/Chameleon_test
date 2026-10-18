@@ -102,8 +102,8 @@ def get_master_sns(build_name, sys_no, df_m, orig_row):
                         res[col] = str(val).strip()
     return res
 
-# HTML PN 排版標籤
-fmt_pn = lambda pn: f" <span style='background-color:#ffe0b2; color:#e65100; padding:2px 6px; border-radius:4px; font-size:0.85em; font-weight:bold;'>PN: {pn}</span>" if pn else ""
+# HTML PN 排版標籤 (加入強制不換行屬性)
+fmt_pn = lambda pn: f" <span style='background-color:#ffe0b2; color:#e65100; padding:2px 6px; border-radius:4px; font-size:0.85em; font-weight:bold; white-space: nowrap; display: inline-block;'>PN: {pn}</span>" if pn else ""
 
 df_map_full = load_mapping_data(file_mapping)
 if 'BUILD' in df_map_full.columns:
