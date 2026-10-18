@@ -60,7 +60,6 @@ def get_custom_css():
     </style>
     """
 
-# 新增：動態讀取專案清單 (如果尚未建立，會自動退回預設的三個專案)
 @st.cache_data(ttl=60)
 def load_build_list():
     default_df = pd.DataFrame([
@@ -75,6 +74,16 @@ def load_build_list():
     except FileNotFoundError:
         return default_df
 
+# 讀取 CSV Master Mapping 檔
+@st.cache_data(ttl=60)
+def load_master_mapping():
+    try: 
+        df = pd.read_csv("mapping.csv", dtype=str)
+        df.fillna("無資料", inplace=True)
+        return df
+    except FileNotFoundError: 
+        return pd.DataFrame(columns=['BUILD', 'NO.', 'MGMT BASE', 'CSM BASE', 'CSM TRAY', 'FULL SYS'])
+
 @st.cache_data(ttl=60)
 def load_rca_data():
     try:
@@ -84,10 +93,9 @@ def load_rca_data():
     except FileNotFoundError:
         return pd.DataFrame()
 
-# 變更：改為吃「實體檔案名稱」，不自作主張加上 _mapping.xlsx
 @st.cache_data(ttl=60)
 def load_mapping_data(filename):
-    empty_df = pd.DataFrame(columns=["SYS#", "BUILD", "CSM BASE", "CSM TRAY", "FULL SYS", "JTAG", "AOT", "FT", "STATUS", "OWNER", "Failure BIN"])
+    empty_df = pd.DataFrame(columns=["SYS#", "BUILD", "CSM BASE", "CSM TRAY", "FULL SYS", "CSM_JTAG", "AOT", "FT", "STATUS", "OWNER", "Failure BIN"])
     
     try: df = pd.read_excel(filename, dtype=str)
     except FileNotFoundError: return empty_df
@@ -100,7 +108,7 @@ def load_mapping_data(filename):
         elif "CSM BASE" in col_upper or "CSM_BASE" in col_upper: rename_dict[col] = "CSM BASE"
         elif "CSM TRAY" in col_upper or "CSM_TRAY" in col_upper: rename_dict[col] = "CSM TRAY"
         elif "FULL SYS" in col_upper or "FULL_SYS" in col_upper: rename_dict[col] = "FULL SYS"
-        elif "JTAG" in col_upper: rename_dict[col] = "JTAG"
+        elif "CSM_JTAG" in col_upper or "JTAG" in col_upper: rename_dict[col] = "CSM_JTAG"
         elif "AOT" in col_upper: rename_dict[col] = "AOT"
         elif "FT" in col_upper: rename_dict[col] = "FT"
         elif "STATUS" in col_upper: rename_dict[col] = "STATUS"
@@ -204,6 +212,17 @@ def save_df_to_github(df, filename, repo_path, commit_message):
         repo.update_file(contents.path, commit_message, excel_data, contents.sha)
     except Exception:
         repo.create_file(repo_path, commit_message, excel_data)
+
+def save_csv_to_github(df, filename, repo_path, commit_message):
+    try: df.to_csv(filename, index=False, encoding='utf-8-sig')
+    except Exception: pass
+    csv_data = df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+    repo = Github(st.secrets["GITHUB_TOKEN"]).get_repo(st.secrets["GITHUB_REPO"])
+    try:
+        contents = repo.get_contents(repo_path)
+        repo.update_file(contents.path, commit_message, csv_data, contents.sha)
+    except Exception:
+        repo.create_file(repo_path, commit_message, csv_data)
 
 def get_sys_states(df_map, df_note):
     def get_t3_state(row):
