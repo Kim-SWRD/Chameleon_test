@@ -70,6 +70,8 @@ def load_build_list():
     try:
         df = pd.read_excel("Build_list.xlsx", dtype=str)
         if df.empty or "Project_Name" not in df.columns: return default_df
+        # 清除專案名稱可能帶有的空白
+        df["Project_Name"] = df["Project_Name"].astype(str).str.strip()
         return df
     except FileNotFoundError:
         return default_df
@@ -78,18 +80,21 @@ def load_build_list():
 def load_master_mapping():
     try: 
         df = pd.read_csv("mapping.csv", dtype=str)
+        if 'BUILD' in df.columns: 
+            df['BUILD'] = df['BUILD'].astype(str).str.strip()
         df.fillna("無資料", inplace=True)
         return df
     except FileNotFoundError: 
         return pd.DataFrame(columns=['BUILD', 'NO.', 'MGMT BASE', 'CSM BASE', 'CSM TRAY', 'FULL SYS'])
 
-# 新增：讀取 Build_PN.csv 的資料
 @st.cache_data(ttl=60)
 def load_build_pn_data():
     try:
         df = pd.read_csv("Build_PN.csv", dtype=str)
-        df.fillna("無資料", inplace=True)
         df.rename(columns=lambda x: str(x).strip().upper(), inplace=True)
+        if 'BUILD' in df.columns: 
+            df['BUILD'] = df['BUILD'].astype(str).str.strip()
+        df.fillna("無資料", inplace=True)
         return df
     except FileNotFoundError:
         return pd.DataFrame(columns=['BUILD', 'NO.', 'MGMT BASE', 'CSM BASE', 'CSM TRAY', 'FULL SYS'])
@@ -128,10 +133,14 @@ def load_mapping_data(filename):
     df.rename(columns=rename_dict, inplace=True)
     if 'NO.' not in df.columns: return empty_df
         
+    # 💡 關鍵修復：強制清除 BUILD 欄位所有的頭尾空白字元
+    if 'BUILD' in df.columns: 
+        df['BUILD'] = df['BUILD'].astype(str).str.strip()
+        
     df['NO.'] = df['NO.'].ffill()
     df = df.dropna(subset=['NO.'])
     df = df.groupby('NO.', as_index=False).first()
-    df["NO."] = df["NO."].astype(str).str.replace(r'\.0$', '', regex=True)
+    df["NO."] = df["NO."].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     df.rename(columns={"NO.": "SYS#"}, inplace=True) 
     df.fillna("無資料", inplace=True)
     return df
@@ -142,7 +151,9 @@ def load_note_data(filename):
     except FileNotFoundError: return pd.DataFrame(columns=["NO.", "NOTE", "NOTICE", "BUILD"])
         
     if 'NO.' in df.columns:
-        df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
+        df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    if 'BUILD' in df.columns: 
+        df['BUILD'] = df['BUILD'].astype(str).str.strip()
     if 'NOTICE' not in df.columns:
         df['NOTICE'] = '0'
     df.fillna("無資料", inplace=True)
@@ -165,7 +176,9 @@ def load_work_item_data():
     try:
         df = pd.read_excel("Work_item.xlsx", dtype=str)
         if 'NO.' in df.columns:
-            df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True)
+            df['NO.'] = df['NO.'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        if 'BUILD' in df.columns: 
+            df['BUILD'] = df['BUILD'].astype(str).str.strip()
         if '事項編號' not in df.columns:
             df.insert(0, '事項編號', [f"W-{i:03d}" for i in range(1, len(df) + 1)])
             try: df.to_excel("Work_item.xlsx", index=False)
@@ -256,7 +269,6 @@ def get_sys_states(df_map, df_note):
             notice_states[sys_id] = n_val
     return status_states, notice_states
 
-# 新增：從 PN DataFrame 反查出對應的 PN
 def get_pn_mapping(build_name, sys_no, df_pn):
     pns = {'MGMT BASE': '', 'CSM BASE': '', 'CSM TRAY': '', 'FULL SYS': ''}
     if df_pn.empty or 'BUILD' not in df_pn.columns: return pns
@@ -270,7 +282,6 @@ def get_pn_mapping(build_name, sys_no, df_pn):
         if not no_match.empty:
             target_row = no_match.iloc[0]
         else:
-            # 找預設例外 (空值、ALL、無資料)
             def_match = b_match[(b_match['NO.'].isna()) | (b_match['NO.'].astype(str).str.strip() == '') | (b_match['NO.'].astype(str).str.upper() == 'ALL') | (b_match['NO.'].astype(str).str.upper() == '無資料')]
             if not def_match.empty:
                 target_row = def_match.iloc[0]
