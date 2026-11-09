@@ -18,6 +18,9 @@ button[data-baseweb="tab"]:nth-child(5) { order: 6 !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# HTML PN 排版標籤 (加入強制不換行屬性)
+fmt_pn = lambda pn: f" <span style='background-color:#ffe0b2; color:#e65100; padding:2px 6px; border-radius:4px; font-size:0.85em; font-weight:bold; white-space: nowrap; display: inline-block;'>PN: {pn}</span>" if pn else ""
+
 # ==========================================
 # ⚙️ 側邊欄：專案清單與動態對應設定
 # ==========================================
@@ -72,45 +75,23 @@ if "w_add_no_input" not in st.session_state: st.session_state["w_add_no_input"] 
 if "show_export_list" not in st.session_state: st.session_state["show_export_list"] = False
 if "show_export_resolved" not in st.session_state: st.session_state["show_export_resolved"] = False
 
-# --- 動態讀取資料與過濾 ---
+# --- 動態讀取資料與合併 ---
 df_rca = load_rca_data()
 df_ho = load_handover_data()
 df_work = load_work_item_data()
 df_master = load_master_mapping()
 df_build_pn = load_build_pn_data()
 
-def get_master_sns(build_name, sys_no, df_m, orig_row):
-    res = {
-        'MGMT BASE': '無資料',
-        'CSM BASE': orig_row.get('CSM BASE', '無資料'),
-        'CSM TRAY': orig_row.get('CSM TRAY', '無資料'),
-        'FULL SYS': orig_row.get('FULL SYS', '無資料')
-    }
-    if not df_m.empty and 'BUILD' in df_m.columns and 'NO.' in df_m.columns:
-        m_match = df_m[(df_m['BUILD'].astype(str).str.upper() == str(build_name).upper()) & 
-                       (df_m['NO.'].astype(str) == str(sys_no))]
-        if not m_match.empty:
-            mr = m_match.iloc[0]
-            val_mgmt = mr.get('MGMT BASE', '無資料')
-            if pd.notna(val_mgmt) and str(val_mgmt).strip() not in ['', 'nan']:
-                res['MGMT BASE'] = str(val_mgmt).strip()
-            
-            for col in ['CSM BASE', 'CSM TRAY', 'FULL SYS']:
-                if col in mr:
-                    val = mr.get(col, '無資料')
-                    if pd.notna(val) and str(val).strip() not in ['', '無資料', 'nan']:
-                        res[col] = str(val).strip()
-    return res
-
-# HTML PN 排版標籤 (加入強制不換行屬性)
-fmt_pn = lambda pn: f" <span style='background-color:#ffe0b2; color:#e65100; padding:2px 6px; border-radius:4px; font-size:0.85em; font-weight:bold; white-space: nowrap; display: inline-block;'>PN: {pn}</span>" if pn else ""
-
+# 1. 載入 Mapping 實體檔，並與 mapping.csv 的資料進行合併
 df_map_full = load_mapping_data(file_mapping)
 if 'BUILD' in df_map_full.columns:
     df_map = df_map_full[df_map_full['BUILD'].astype(str).str.upper() == current_build.upper()].copy()
 else:
     df_map = df_map_full.copy()
+    
+df_map = merge_mapping_with_master(df_map, df_master, current_build)
 
+# 2. 載入 Note 實體檔
 df_note_full = load_note_data(file_note)
 if 'BUILD' in df_note_full.columns:
     df_note = df_note_full[df_note_full['BUILD'].astype(str).str.upper() == current_build.upper()].copy()
@@ -150,29 +131,19 @@ with tab_search:
             if b_map_full.empty: continue
             
             if 'BUILD' in b_map_full.columns:
-                b_map = b_map_full[b_map_full['BUILD'].astype(str).str.upper() == b.upper()]
+                b_map = b_map_full[b_map_full['BUILD'].astype(str).str.upper() == b.upper()].copy()
             else:
-                b_map = b_map_full
+                b_map = b_map_full.copy()
+                
+            b_map = merge_mapping_with_master(b_map, df_master, b)
             
             search_val_cleaned = search_target.replace(f"{b}#", "").replace("TS#", "")
             
-            sys_ids_from_master = []
-            if not df_master.empty and 'BUILD' in df_master.columns:
-                sys_ids_from_master = df_master[
-                    (df_master['BUILD'].astype(str).str.upper() == b.upper()) &
-                    (
-                        (df_master.get('MGMT BASE', pd.Series(dtype=str)).astype(str).str.upper() == search_target) |
-                        (df_master.get('CSM BASE', pd.Series(dtype=str)).astype(str).str.upper() == search_target) |
-                        (df_master.get('CSM TRAY', pd.Series(dtype=str)).astype(str).str.upper() == search_target) |
-                        (df_master.get('FULL SYS', pd.Series(dtype=str)).astype(str).str.upper() == search_target)
-                    )
-                ]['NO.'].astype(str).tolist()
-
             mask = (b_map['SYS#'].astype(str).str.upper() == search_val_cleaned) | \
+                   (b_map['MGMT BASE'].astype(str).str.upper() == search_target) | \
                    (b_map['CSM BASE'].astype(str).str.upper() == search_target) | \
                    (b_map['CSM TRAY'].astype(str).str.upper() == search_target) | \
-                   (b_map['FULL SYS'].astype(str).str.upper() == search_target) | \
-                   (b_map['SYS#'].astype(str).isin(sys_ids_from_master))
+                   (b_map['FULL SYS'].astype(str).str.upper() == search_target)
             
             matches = b_map[mask]
             
@@ -180,17 +151,16 @@ with tab_search:
                 found_anything = True
                 for _, m_row in matches.iterrows():
                     sys_id = m_row['SYS#']
-                    m_sns = get_master_sns(b, sys_id, df_master, m_row)
                     pns = get_pn_mapping(b, sys_id, df_build_pn)
                     
                     with st.expander(f"🎯 查獲機台: {b}#{sys_id} (點擊收合詳細資訊)", expanded=True):
                         c1, c2 = st.columns(2)
                         with c1:
                             st.markdown("#### 🔄 關聯序號 (Mapping)")
-                            st.markdown(f"**MGMT BASE**: `{m_sns['MGMT BASE']}`{fmt_pn(pns['MGMT BASE'])}  \n"
-                                        f"**CSM BASE**: `{m_sns['CSM BASE']}`{fmt_pn(pns['CSM BASE'])}  \n"
-                                        f"**CSM TRAY**: `{m_sns['CSM TRAY']}`{fmt_pn(pns['CSM TRAY'])}  \n"
-                                        f"**FULL SYS**: `{m_sns['FULL SYS']}`{fmt_pn(pns['FULL SYS'])}", unsafe_allow_html=True)
+                            st.markdown(f"**MGMT BASE**: `{m_row.get('MGMT BASE', '無資料')}`{fmt_pn(pns['MGMT BASE'])}  \n"
+                                        f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`{fmt_pn(pns['CSM BASE'])}  \n"
+                                        f"**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`{fmt_pn(pns['CSM TRAY'])}  \n"
+                                        f"**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`{fmt_pn(pns['FULL SYS'])}", unsafe_allow_html=True)
                         with c2:
                             st.markdown("#### 📊 WIP 狀態")
                             st.markdown(f"**CSM_JTAG**: `{m_row.get('CSM_JTAG', '無資料')}` ｜ "
@@ -593,9 +563,10 @@ with tab_map:
         st.session_state["map_col"] = f"{current_build}#"
         st.session_state["map_search_input"] = num_str
 
+    # 包含 MGMT BASE 計算
     def get_sn_count(row):
         cnt = 0
-        for col in ['CSM BASE', 'CSM TRAY', 'FULL SYS']:
+        for col in ['MGMT BASE', 'CSM BASE', 'CSM TRAY', 'FULL SYS']:
             val = row.get(col, "無資料")
             if pd.notna(val) and str(val).strip() not in ["", "無資料", "nan", "NaN"]: cnt += 1
         return cnt
@@ -619,14 +590,6 @@ with tab_map:
             if search_col_internal in df_map.columns:
                 temp_df = df_map[df_map[search_col_internal] == query_val]
                 active_sys_numbers = set(temp_df["SYS#"].dropna().astype(str).tolist())
-        elif current_search_col == "MGMT BASE":
-            sys_ids = []
-            if not df_master.empty and 'BUILD' in df_master.columns:
-                sys_ids = df_master[
-                    (df_master['BUILD'].astype(str).str.upper() == current_build.upper()) & 
-                    (df_master['MGMT BASE'].astype(str).str.upper() == query_val.upper().strip())
-                ]['NO.'].astype(str).tolist()
-            active_sys_numbers = set(df_map[df_map['SYS#'].isin(sys_ids)]["SYS#"].dropna().astype(str).tolist())
         else:
             search_col_internal = current_search_col
             if search_col_internal in df_map.columns:
@@ -639,10 +602,12 @@ with tab_map:
     for idx, sys_val in enumerate(valid_sys_list):
         c = sys_sn_counts.get(sys_val, 0)
         is_selected = (sys_val in active_sys_numbers)
-        if c == 3: full_cnt += 1
-        elif c in [1, 2]: partial_cnt += 1
+        # 4項全滿才是完整綠色
+        if c == 4: full_cnt += 1
+        elif c in [1, 2, 3]: partial_cnt += 1
         else: empty_cnt += 1
-        if c in [1, 2]:
+        
+        if c in [1, 2, 3]:
             dynamic_yellow_css_t2 += (
                 f'div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"] {{ background-color: #ffc107 !important; border-color: #ffc107 !important; color: #000000 !important; }} '
                 f'div[data-testid="stExpanderDetails"]:has(.t2-panel) div[data-testid="stHorizontalBlock"] > div:nth-child({idx + 1}) button[kind="secondary"]:hover {{ background-color: #e0a800 !important; border-color: #e0a800 !important; }} '
@@ -657,12 +622,12 @@ with tab_map:
     with st.expander(panel_title_t2, expanded=True):
         st.markdown('<div class="t2-panel" style="display:none;"></div>', unsafe_allow_html=True)
         if len(valid_sys_list) == 0:
-            st.info(f"📂 尚無 {current_build} 資料，請先上傳 {file_mapping}")
+            st.info(f"📂 尚無 {current_build} 資料，請先上傳 {file_mapping} 或 mapping.csv")
         else:
             cols = st.columns(len(valid_sys_list))
             for idx, sys_val in enumerate(valid_sys_list):
                 c = sys_sn_counts.get(sys_val, 0)
-                btn_type = "primary" if c == 3 else "secondary"
+                btn_type = "primary" if c == 4 else "secondary"
                 cols[idx].button(str(sys_val), key=f"btn_t2_{sys_val}", on_click=set_sys_search, args=(sys_val,), type=btn_type, use_container_width=True)
 
     with st.expander(f"🔍 條件反查 (使用 {current_build}# 或 SN 搜尋)", expanded=False):
@@ -679,14 +644,6 @@ with tab_map:
             search_val_proc = search_val.upper().replace(search_col, "").replace(f"{current_build}#", "").replace("TS#", "").strip()
             if search_col_internal in df_map.columns:
                 match_df = df_map[df_map[search_col_internal] == search_val_proc]
-        elif search_col == "MGMT BASE":
-            sys_ids = []
-            if not df_master.empty and 'BUILD' in df_master.columns:
-                sys_ids = df_master[
-                    (df_master['BUILD'].astype(str).str.upper() == current_build.upper()) & 
-                    (df_master['MGMT BASE'].astype(str).str.upper() == search_val.upper().strip())
-                ]['NO.'].astype(str).tolist()
-            match_df = df_map[df_map['SYS#'].isin(sys_ids)]
         else:
             search_col_internal = search_col
             search_val_proc = search_val
@@ -697,7 +654,6 @@ with tab_map:
             st.success("✅ 找到對應的 SN 關聯資料！")
             for idx, row in match_df.iterrows():
                 sys_id = row['SYS#']
-                m_sns = get_master_sns(current_build, sys_id, df_master, row)
                 pns = get_pn_mapping(current_build, sys_id, df_build_pn)
                 
                 with st.container(border=True):
@@ -708,19 +664,19 @@ with tab_map:
                     c0, c1, c2, c3 = st.columns(4)
                     with c0:
                         st.markdown(f"**MGMT BASE**{fmt_pn(pns['MGMT BASE'])}", unsafe_allow_html=True)
-                        st.code(m_sns['MGMT BASE'], language="plaintext")
+                        st.code(row.get('MGMT BASE', '無資料'), language="plaintext")
                     with c1:
                         st.markdown(f"**CSM BASE**{fmt_pn(pns['CSM BASE'])}", unsafe_allow_html=True)
-                        if is_editing: st.text_input("CSM BASE", value=m_sns['CSM BASE'], label_visibility="collapsed", key=f"t2_edit_base_{sys_id}")
-                        else: st.code(m_sns['CSM BASE'], language="plaintext")
+                        if is_editing: st.text_input("CSM BASE", value=row.get('CSM BASE', '無資料'), label_visibility="collapsed", key=f"t2_edit_base_{sys_id}")
+                        else: st.code(row.get('CSM BASE', '無資料'), language="plaintext")
                     with c2:
                         st.markdown(f"**CSM TRAY**{fmt_pn(pns['CSM TRAY'])}", unsafe_allow_html=True)
-                        if is_editing: st.text_input("CSM TRAY", value=m_sns['CSM TRAY'], label_visibility="collapsed", key=f"t2_edit_tray_{sys_id}")
-                        else: st.code(m_sns['CSM TRAY'], language="plaintext")
+                        if is_editing: st.text_input("CSM TRAY", value=row.get('CSM TRAY', '無資料'), label_visibility="collapsed", key=f"t2_edit_tray_{sys_id}")
+                        else: st.code(row.get('CSM TRAY', '無資料'), language="plaintext")
                     with c3:
                         st.markdown(f"**FULL SYS**{fmt_pn(pns['FULL SYS'])}", unsafe_allow_html=True)
-                        if is_editing: st.text_input("FULL SYS", value=m_sns['FULL SYS'], label_visibility="collapsed", key=f"t2_edit_full_{sys_id}")
-                        else: st.code(m_sns['FULL SYS'], language="plaintext")
+                        if is_editing: st.text_input("FULL SYS", value=row.get('FULL SYS', '無資料'), label_visibility="collapsed", key=f"t2_edit_full_{sys_id}")
+                        else: st.code(row.get('FULL SYS', '無資料'), language="plaintext")
                     
                     if is_editing:
                         st.divider()
@@ -749,16 +705,27 @@ with tab_map:
                                             df_map_full.loc[idx_update, 'CSM_JTAG'] = st.session_state.get(f"t2_edit_jtag_{sys_id}", "無資料")
                                             df_map_full.loc[idx_update, 'AOT'] = st.session_state.get(f"t2_edit_aot_{sys_id}", "無資料")
                                             df_map_full.loc[idx_update, 'FT'] = st.session_state.get(f"t2_edit_ft_{sys_id}", "無資料")
-
-                                            df_upload = df_map_full.copy()
-                                            df_upload.rename(columns={"SYS#": "NO."}, inplace=True)
-                                            save_df_to_github(df_upload, file_mapping, file_mapping, f"Update {current_build}#{sys_id} via Streamlit")
-                                            st.cache_data.clear()
-                                            st.success("✅ 成功同步！畫面即將重新載入...")
-                                            time.sleep(1.5)
-                                            st.rerun()
                                         else:
-                                            st.error("❌ 找不到該筆資料進行更新")
+                                            # 如果機台是從 mapping.csv 產生的，則新增到原本的 Excel 檔中
+                                            new_excel_row = pd.DataFrame([{
+                                                'SYS#': sys_id, 'BUILD': current_build,
+                                                'CSM BASE': st.session_state.get(f"t2_edit_base_{sys_id}", "").strip() or "無資料",
+                                                'CSM TRAY': st.session_state.get(f"t2_edit_tray_{sys_id}", "").strip() or "無資料",
+                                                'FULL SYS': st.session_state.get(f"t2_edit_full_{sys_id}", "").strip() or "無資料",
+                                                'CSM_JTAG': st.session_state.get(f"t2_edit_jtag_{sys_id}", "無資料"),
+                                                'AOT': st.session_state.get(f"t2_edit_aot_{sys_id}", "無資料"),
+                                                'FT': st.session_state.get(f"t2_edit_ft_{sys_id}", "無資料"),
+                                                'STATUS': '無資料', 'OWNER': '無資料', 'Failure BIN': '無資料'
+                                            }])
+                                            df_map_full = pd.concat([df_map_full, new_excel_row], ignore_index=True)
+
+                                        df_upload = df_map_full.copy()
+                                        df_upload.rename(columns={"SYS#": "NO."}, inplace=True)
+                                        save_df_to_github(df_upload, file_mapping, file_mapping, f"Update {current_build}#{sys_id} via Streamlit")
+                                        st.cache_data.clear()
+                                        st.success("✅ 成功同步！畫面即將重新載入...")
+                                        time.sleep(1.5)
+                                        st.rerun()
                                     except Exception as e:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
@@ -939,7 +906,6 @@ with tab_status:
                 val_notice = str(note_row['NOTICE'].values[0]).strip() if not note_row.empty else '0'
                 if val_notice.endswith('.0'): val_notice = val_notice[:-2]
                 
-                m_sns = get_master_sns(current_build, sys_id, df_master, row)
                 pns = get_pn_mapping(current_build, sys_id, df_build_pn)
                 
                 with st.container(border=True):
@@ -961,10 +927,10 @@ with tab_status:
 
                     if is_editing:
                         st.markdown(
-                            f"**MGMT BASE**: <code style='font-size: 18px;'>{m_sns['MGMT BASE']}</code>{fmt_pn(pns['MGMT BASE'])}<br>"
-                            f"**CSM BASE**: <code style='font-size: 18px;'>{m_sns['CSM BASE']}</code>{fmt_pn(pns['CSM BASE'])}<br>"
-                            f"**CSM TRAY**: <code style='font-size: 18px;'>{m_sns['CSM TRAY']}</code>{fmt_pn(pns['CSM TRAY'])}<br>"
-                            f"**FULL SYS**: <code style='font-size: 18px;'>{m_sns['FULL SYS']}</code>{fmt_pn(pns['FULL SYS'])}",
+                            f"**MGMT BASE**: <code style='font-size: 18px;'>{row.get('MGMT BASE', '無資料')}</code>{fmt_pn(pns['MGMT BASE'])}<br>"
+                            f"**CSM BASE**: <code style='font-size: 18px;'>{row.get('CSM BASE', '無資料')}</code>{fmt_pn(pns['CSM BASE'])}<br>"
+                            f"**CSM TRAY**: <code style='font-size: 18px;'>{row.get('CSM TRAY', '無資料')}</code>{fmt_pn(pns['CSM TRAY'])}<br>"
+                            f"**FULL SYS**: <code style='font-size: 18px;'>{row.get('FULL SYS', '無資料')}</code>{fmt_pn(pns['FULL SYS'])}",
                             unsafe_allow_html=True
                         )
                         st.markdown("#### 🔍 站點狀態")
@@ -1009,10 +975,21 @@ with tab_status:
                                             df_map_full.loc[idx_update, 'STATUS'] = new_status
                                             df_map_full.loc[idx_update, 'OWNER'] = new_owner.strip() or "無資料"
                                             df_map_full.loc[idx_update, 'Failure BIN'] = new_fail_bin.strip() or "無資料"
+                                        else:
+                                            new_excel_row = pd.DataFrame([{
+                                                'SYS#': sys_id, 'BUILD': current_build,
+                                                'CSM BASE': row.get('CSM BASE', '無資料'),
+                                                'CSM TRAY': row.get('CSM TRAY', '無資料'),
+                                                'FULL SYS': row.get('FULL SYS', '無資料'),
+                                                'CSM_JTAG': new_jtag, 'AOT': new_aot, 'FT': new_ft,
+                                                'STATUS': new_status, 'OWNER': new_owner.strip() or "無資料", 
+                                                'Failure BIN': new_fail_bin.strip() or "無資料"
+                                            }])
+                                            df_map_full = pd.concat([df_map_full, new_excel_row], ignore_index=True)
 
-                                            df_upload_map = df_map_full.copy()
-                                            df_upload_map.rename(columns={"SYS#": "NO."}, inplace=True)
-                                            save_df_to_github(df_upload_map, file_mapping, file_mapping, f"Update {current_build}#{sys_id} Mapping")
+                                        df_upload_map = df_map_full.copy()
+                                        df_upload_map.rename(columns={"SYS#": "NO."}, inplace=True)
+                                        save_df_to_github(df_upload_map, file_mapping, file_mapping, f"Update {current_build}#{sys_id} Mapping")
 
                                         if 'BUILD' in df_note_full.columns:
                                             idx_note = df_note_full[(df_note_full['NO.'] == str(sys_id)) & (df_note_full['BUILD'].astype(str).str.upper() == current_build.upper())].index
@@ -1038,10 +1015,10 @@ with tab_status:
                                         st.error(f"❌ 上傳失敗: {e}")
                     else:
                         st.markdown(
-                            f"**MGMT BASE**: <code style='font-size: 18px;'>{m_sns['MGMT BASE']}</code>{fmt_pn(pns['MGMT BASE'])}<br>"
-                            f"**CSM BASE**: <code style='font-size: 18px;'>{m_sns['CSM BASE']}</code>{fmt_pn(pns['CSM BASE'])}<br>"
-                            f"**CSM TRAY**: <code style='font-size: 18px;'>{m_sns['CSM TRAY']}</code>{fmt_pn(pns['CSM TRAY'])}<br>"
-                            f"**FULL SYS**: <code style='font-size: 18px;'>{m_sns['FULL SYS']}</code>{fmt_pn(pns['FULL SYS'])}",
+                            f"**MGMT BASE**: <code style='font-size: 18px;'>{row.get('MGMT BASE', '無資料')}</code>{fmt_pn(pns['MGMT BASE'])}<br>"
+                            f"**CSM BASE**: <code style='font-size: 18px;'>{row.get('CSM BASE', '無資料')}</code>{fmt_pn(pns['CSM BASE'])}<br>"
+                            f"**CSM TRAY**: <code style='font-size: 18px;'>{row.get('CSM TRAY', '無資料')}</code>{fmt_pn(pns['CSM TRAY'])}<br>"
+                            f"**FULL SYS**: <code style='font-size: 18px;'>{row.get('FULL SYS', '無資料')}</code>{fmt_pn(pns['FULL SYS'])}",
                             unsafe_allow_html=True
                         )
                         st.markdown(f"🔍 **CSM_JTAG**: `{row.get('CSM_JTAG', '無資料')}` ｜ **AOT**: `{row.get('AOT', '無資料')}` ｜ **FT**: `{row.get('FT', '無資料')}`")
@@ -1059,6 +1036,8 @@ with tab_status:
                         else: st.info(f"**{display_note}**")
                             
                         render_handover_status(sys_id, current_build, df_ho, is_editing=False)
+        else:
+            st.error(f"⚠️ 找不到該筆資料。")
 
 # ==========================================
 # 分頁 4: 追踨
@@ -1267,21 +1246,22 @@ with tab_work:
                     b_map_full_work = load_mapping_data(m_file_work)
                     
                     if 'BUILD' in b_map_full_work.columns:
-                        item_df_map = b_map_full_work[b_map_full_work['BUILD'].astype(str).str.upper() == item_build_val]
+                        item_df_map = b_map_full_work[b_map_full_work['BUILD'].astype(str).str.upper() == item_build_val].copy()
                     else:
-                        item_df_map = b_map_full_work
+                        item_df_map = b_map_full_work.copy()
+                        
+                    item_df_map = merge_mapping_with_master(item_df_map, df_master, item_build_val)
                         
                     match_df = item_df_map[item_df_map['SYS#'] == cross_ref_no]
                     if not match_df.empty:
                         m_row = match_df.iloc[0]
-                        m_sns = get_master_sns(item_build_val, cross_ref_no, df_master, m_row)
                         pns = get_pn_mapping(item_build_val, cross_ref_no, df_build_pn)
                         
                         st.markdown(
-                            f"**MGMT BASE**: `{m_sns['MGMT BASE']}`{fmt_pn(pns['MGMT BASE'])}  \n"
-                            f"**CSM BASE**: `{m_sns['CSM BASE']}`{fmt_pn(pns['CSM BASE'])}  \n"
-                            f"**CSM TRAY**: `{m_sns['CSM TRAY']}`{fmt_pn(pns['CSM TRAY'])}  \n"
-                            f"**FULL SYS**: `{m_sns['FULL SYS']}`{fmt_pn(pns['FULL SYS'])}",
+                            f"**MGMT BASE**: `{m_row.get('MGMT BASE', '無資料')}`{fmt_pn(pns['MGMT BASE'])}  \n"
+                            f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`{fmt_pn(pns['CSM BASE'])}  \n"
+                            f"**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`{fmt_pn(pns['CSM TRAY'])}  \n"
+                            f"**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`{fmt_pn(pns['FULL SYS'])}",
                             unsafe_allow_html=True
                         )
                         st.markdown(f"**CSM_JTAG**: `{m_row.get('CSM_JTAG', '無資料')}` ｜ **AOT**: `{m_row.get('AOT', '無資料')}` ｜ **FT**: `{m_row.get('FT', '無資料')}`")
@@ -1384,21 +1364,22 @@ with tab_work:
                     b_map_full_work = load_mapping_data(m_file_work)
                     
                     if 'BUILD' in b_map_full_work.columns:
-                        item_df_map = b_map_full_work[b_map_full_work['BUILD'].astype(str).str.upper() == item_build_val]
+                        item_df_map = b_map_full_work[b_map_full_work['BUILD'].astype(str).str.upper() == item_build_val].copy()
                     else:
-                        item_df_map = b_map_full_work
+                        item_df_map = b_map_full_work.copy()
+                        
+                    item_df_map = merge_mapping_with_master(item_df_map, df_master, item_build_val)
                         
                     match_df = item_df_map[item_df_map['SYS#'] == cross_ref_no]
                     if not match_df.empty:
                         m_row = match_df.iloc[0]
-                        m_sns = get_master_sns(item_build_val, cross_ref_no, df_master, m_row)
                         pns = get_pn_mapping(item_build_val, cross_ref_no, df_build_pn)
                         
                         st.markdown(
-                            f"**MGMT BASE**: `{m_sns['MGMT BASE']}`{fmt_pn(pns['MGMT BASE'])}  \n"
-                            f"**CSM BASE**: `{m_sns['CSM BASE']}`{fmt_pn(pns['CSM BASE'])}  \n"
-                            f"**CSM TRAY**: `{m_sns['CSM TRAY']}`{fmt_pn(pns['CSM TRAY'])}  \n"
-                            f"**FULL SYS**: `{m_sns['FULL SYS']}`{fmt_pn(pns['FULL SYS'])}",
+                            f"**MGMT BASE**: `{m_row.get('MGMT BASE', '無資料')}`{fmt_pn(pns['MGMT BASE'])}  \n"
+                            f"**CSM BASE**: `{m_row.get('CSM BASE', '無資料')}`{fmt_pn(pns['CSM BASE'])}  \n"
+                            f"**CSM TRAY**: `{m_row.get('CSM TRAY', '無資料')}`{fmt_pn(pns['CSM TRAY'])}  \n"
+                            f"**FULL SYS**: `{m_row.get('FULL SYS', '無資料')}`{fmt_pn(pns['FULL SYS'])}",
                             unsafe_allow_html=True
                         )
                         st.markdown(f"**CSM_JTAG**: `{m_row.get('CSM_JTAG', '無資料')}` ｜ **AOT**: `{m_row.get('AOT', '無資料')}` ｜ **FT**: `{m_row.get('FT', '無資料')}`")

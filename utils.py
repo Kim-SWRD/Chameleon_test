@@ -70,7 +70,6 @@ def load_build_list():
     try:
         df = pd.read_excel("Build_list.xlsx", dtype=str)
         if df.empty or "Project_Name" not in df.columns: return default_df
-        # 清除專案名稱可能帶有的空白
         df["Project_Name"] = df["Project_Name"].astype(str).str.strip()
         return df
     except FileNotFoundError:
@@ -133,7 +132,6 @@ def load_mapping_data(filename):
     df.rename(columns=rename_dict, inplace=True)
     if 'NO.' not in df.columns: return empty_df
         
-    # 💡 關鍵修復：強制清除 BUILD 欄位所有的頭尾空白字元
     if 'BUILD' in df.columns: 
         df['BUILD'] = df['BUILD'].astype(str).str.strip()
         
@@ -187,6 +185,50 @@ def load_work_item_data():
         return df
     except FileNotFoundError:
         return pd.DataFrame(columns=['事項編號', '工作狀態', 'BUILD', 'NO.', '事項描述', '回報狀況', '起始日期', '經手人員', 'Station'])
+
+# 💡 核心新增：直接將 mapping.csv 的資料合併/更新進 UI 運作的 df_map 裡
+def merge_mapping_with_master(df_map, df_master, build_name):
+    if 'MGMT BASE' not in df_map.columns:
+        df_map['MGMT BASE'] = '無資料'
+        
+    if df_master.empty or 'BUILD' not in df_master.columns:
+        return df_map
+        
+    df_m_build = df_master[df_master['BUILD'].astype(str).str.upper() == str(build_name).upper()]
+    if df_m_build.empty:
+        return df_map
+        
+    for _, m_row in df_m_build.iterrows():
+        sys_id = str(m_row.get('NO.', '')).strip()
+        if not sys_id or sys_id == 'nan' or sys_id == '無資料': continue
+        
+        mgmt_val = str(m_row.get('MGMT BASE', '無資料')).strip()
+        csm_val = str(m_row.get('CSM BASE', '無資料')).strip()
+        tray_val = str(m_row.get('CSM TRAY', '無資料')).strip()
+        full_val = str(m_row.get('FULL SYS', '無資料')).strip()
+        
+        if mgmt_val in ['', 'nan']: mgmt_val = '無資料'
+        if csm_val in ['', 'nan']: csm_val = '無資料'
+        if tray_val in ['', 'nan']: tray_val = '無資料'
+        if full_val in ['', 'nan']: full_val = '無資料'
+        
+        if sys_id in df_map['SYS#'].values:
+            idx = df_map[df_map['SYS#'] == sys_id].index
+            if mgmt_val != '無資料': df_map.loc[idx, 'MGMT BASE'] = mgmt_val
+            if csm_val != '無資料': df_map.loc[idx, 'CSM BASE'] = csm_val
+            if tray_val != '無資料': df_map.loc[idx, 'CSM TRAY'] = tray_val
+            if full_val != '無資料': df_map.loc[idx, 'FULL SYS'] = full_val
+        else:
+            new_row = pd.DataFrame([{
+                'SYS#': sys_id, 'BUILD': build_name,
+                'MGMT BASE': mgmt_val, 'CSM BASE': csm_val, 
+                'CSM TRAY': tray_val, 'FULL SYS': full_val,
+                'CSM_JTAG': '無資料', 'AOT': '無資料', 'FT': '無資料', 
+                'STATUS': '無資料', 'OWNER': '無資料', 'Failure BIN': '無資料'
+            }])
+            df_map = pd.concat([df_map, new_row], ignore_index=True)
+            
+    return df_map
 
 def get_next_work_id(df):
     if df.empty or '事項編號' not in df.columns: return "W-001"
